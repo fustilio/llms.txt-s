@@ -1,0 +1,762 @@
+# TanStack Table V8 Summary
+
+This document summarizes the core concepts, key APIs, and best practices for using TanStack Table V8 based on the provided documentation and examples.
+
+## 1. Introduction & Core Philosophy
+
+*   **Headless UI:** TanStack Table provides the logic, state management, and API for building tables and datagrids but **does not render any markup or styles**. You have full control over the UI implementation.
+*   **Framework Agnostic:** The core (`@tanstack/table-core`) is written in vanilla TypeScript. Adapters are available for major frameworks (React, Vue, Solid, Svelte, Angular, Qwik, Lit) to provide idiomatic integration.
+*   **CSS/Component Library Agnostic:** Since it's headless, you can use any styling solution (CSS, Tailwind, CSS-in-JS) or component library (Material UI, Bootstrap, ShadCN) alongside it.
+*   **Modular & Tree-Shakable:** Features are imported and included as needed, keeping bundle sizes down.
+
+## 2. Core Concepts & Objects
+
+### 2.1 Data (`data`)
+
+*   The array of data objects (or any shape) that the table will display.
+*   **Stable Reference:** Crucial for performance, especially in React. Define `data` outside the component, or use `useState`, `useMemo`, or a state management library (e.g., React Query, Zustand) to ensure the data array reference doesn't change on every render unless the data itself has changed. Failure to do so can cause infinite re-renders.
+
+    ```tsx
+    // React Example: Stable Data Reference
+    import React, { useMemo, useState } from 'react';
+    import { useReactTable, getCoreRowModel, ColumnDef } from '@tanstack/react-table';
+    import { makeData, Person } from './makeData'; // Assuming makeData exists
+
+    const App = () => {
+      // ✅ GOOD: Define columns outside or memoize
+      const columns = useMemo<ColumnDef<Person>[]>(() => [
+        // ... column definitions
+      ], []);
+
+      // ✅ GOOD: Use useState or fetch data with a library like React Query
+      const [data, setData] = useState(() => makeData(100));
+      // OR
+      // const {  queryData } = useQuery(...);
+      // const data = useMemo(() => queryData ?? [], [queryData]);
+
+      // ✅ GOOD: Fallback data defined outside component
+      const fallbackData = useMemo(() => [], []);
+
+      const table = useReactTable({
+        columns,
+         data ?? fallbackData, // Use stable data reference
+        getCoreRowModel: getCoreRowModel(),
+      });
+
+      // ... render table
+    }
+
+    // 😵 BAD: Avoid defining data directly in the component body
+    // const badData = makeData(100); // New array on every render!
+    // const table = useReactTable({ columns,  badData, ... });
+    ```
+*   **Data Types:** Define a TypeScript type for your data rows (`TData`). This enables strong type safety throughout the table instance and APIs.
+
+    ```typescript
+    // Example TData type
+    type Person = {
+      firstName: string;
+      lastName: string;
+      age: number;
+      visits: number;
+      progress: number;
+      status: 'relationship' | 'complicated' | 'single';
+      subRows?: Person[]; // For expanding features
+    };
+
+    const  Person[] = [/* ... */];
+    ```
+*   **Deeply Nested Data:** Access nested data using dot notation in `accessorKey` or via `accessorFn`.
+
+    ```typescript
+    type User = {
+      name: { first: string; last: string };
+      info: { age: number; visits: number };
+    };
+
+    const columns: ColumnDef<User>[] = [
+      { header: 'First Name', accessorKey: 'name.first' }, // Dot notation
+      { header: 'Age', accessorFn: row => row.info.age }, // Accessor function
+    ];
+    ```
+
+### 2.2 Column Definitions (`columns`)
+
+*   An array of objects defining each column's behavior, data mapping, and rendering.
+*   **Stable Reference:** Like `data`, the `columns` array must have a stable reference (use `useMemo` in React).
+*   **Types of Column Defs:**
+    *   **Accessor Columns:** Map to data in your `data` array. Can be sorted, filtered, grouped. Defined using `accessorKey` (string path, including dot notation for deep access) or `accessorFn` (function receiving the row).
+    *   **Display Columns:** Used for rendering arbitrary content (e.g., action buttons, checkboxes, expanders). Do not map directly to data. Require a unique `id`.
+    *   **Grouping Columns:** Group other columns visually under a common header. Defined using the `columns` property within a column definition.
+*   **`createColumnHelper`:** A utility function (optional but recommended for TypeScript) to create column definitions with better type safety.
+
+    ```typescript
+    import { createColumnHelper, ColumnDef } from '@tanstack/react-table';
+
+    type Person = { /* ... */ };
+    const columnHelper = createColumnHelper<Person>();
+
+    const columns: ColumnDef<Person>[] = [
+      // Accessor Column (string key)
+      columnHelper.accessor('firstName', {
+        cell: info => info.getValue(),
+        header: 'First Name',
+        footer: 'First Name Footer',
+        size: 150, // Optional size
+      }),
+      // Accessor Column (function)
+      columnHelper.accessor(row => row.lastName, {
+        id: 'lastName', // Required if accessorFn is used
+        cell: info => <i>{info.getValue()}</i>,
+        header: () => <span>Last Name</span>,
+      }),
+      // Display Column (e.g., for actions)
+      columnHelper.display({
+        id: 'actions',
+        header: 'Actions',
+        cell: props => <button onClick={() => alert(`Editing ${props.row.original.firstName}`)}>Edit</button>,
+      }),
+      // Grouping Column
+      columnHelper.group({
+        header: 'Info Group',
+        columns: [
+          columnHelper.accessor('age', { header: 'Age' }),
+          columnHelper.accessor('visits', { header: 'Visits' }),
+        ],
+      }),
+    ];
+    ```
+*   **Key ColumnDef Properties:**
+    *   `id`: Unique identifier. Optional if using `accessorKey` or a string `header`. Required for `accessorFn` and `display` columns.
+    *   `accessorKey`: String path to data (e.g., `'firstName'`, `'address.street'`).
+    *   `accessorFn`: Function `(originalRow, index) => value` to derive cell value.
+    *   `header`: Content for the header cell (string, JSX, or function `(props) => content`).
+    *   `cell`: Content for the data cells (string, JSX, or function `(props) => content`). Use `props.getValue()` or `props.renderValue()` inside.
+    *   `footer`: Content for the footer cell (string, JSX, or function `(props) => content`).
+    *   `columns`: Array of nested `ColumnDef` for grouping.
+    *   `size`, `minSize`, `maxSize`: For column sizing.
+    *   `enable*`: Feature-specific flags (e.g., `enableSorting`, `enableHiding`).
+    *   `meta`: Arbitrary metadata object for custom use cases. Extensible via TypeScript declaration merging.
+
+### 2.3 Table Instance (`table`)
+
+*   The central object returned by the adapter hook (e.g., `useReactTable`).
+*   Holds the table's state and provides APIs to interact with it.
+*   Created by passing `data`, `columns`, `getCoreRowModel`, and other options.
+
+    ```typescript
+    // React Example
+    import { useReactTable, getCoreRowModel } from '@tanstack/react-table';
+
+    const table = useReactTable({
+      data,
+      columns,
+      getCoreRowModel: getCoreRowModel(),
+      // ... other options like state, initialState, feature row models, etc.
+    });
+    ```
+
+### 2.4 Row Models
+
+*   Functions that process the `data` array based on enabled features (filtering, sorting, pagination, etc.).
+*   Import and provide the necessary row model getters to the table options (e.g., `getFilteredRowModel`, `getSortedRowModel`).
+*   **Order of Execution:** `Core` -> `Filtering` -> `Grouping` -> `Sorting` -> `Expanding` -> `Pagination`.
+*   **Accessing Row Models:** Use `table.getRowModel()` for the final, processed rows to render. Other models (`getPre*`, `get*RowModel`) are available for inspecting intermediate states.
+
+    ```typescript
+    import {
+      useReactTable,
+      getCoreRowModel,
+      getFilteredRowModel,
+      getSortedRowModel,
+      getPaginationRowModel,
+      // ... other models as needed
+    } from '@tanstack/react-table';
+
+    const table = useReactTable({
+      data,
+      columns,
+      getCoreRowModel: getCoreRowModel(),
+      getFilteredRowModel: getFilteredRowModel(),
+      getSortedRowModel: getSortedRowModel(),
+      getPaginationRowModel: getPaginationRowModel(),
+      // ...
+    });
+
+    // Render the final processed rows
+    table.getRowModel().rows.map(row => ( /* ... */ ));
+    ```
+*   **Row Model Structure:** Each model provides:
+    *   `rows`: Array of `Row` objects for the current level.
+    *   `flatRows`: Flattened array including all sub-rows.
+    *   `rowsById`: Object mapping `row.id` to `Row` objects for quick lookup.
+
+### 2.5 Rows (`row`)
+
+*   Represent a single row of data within a specific row model.
+*   Accessed via `table.getRowModel().rows`.
+*   **Key Row Properties/Methods:**
+    *   `id`: Unique row identifier (defaults to index, customizable via `getRowId` table option).
+    *   `index`: Original index within its parent array.
+    *   `original`: The original data item for this row.
+    *   `depth`: Nesting level (0 for root).
+    *   `getVisibleCells()`: Returns an array of `Cell` objects for visible columns in this row.
+    *   `getValue(columnId)`: Gets the processed value for a specific column in this row.
+    *   `getIsSelected()`: Returns `true` if the row is selected.
+    *   `toggleSelected()`: Toggles the row's selection state.
+    *   `getToggleSelectedHandler()`: Event handler for selection toggling.
+    *   `getIsExpanded()`: Returns `true` if the row is expanded.
+    *   `toggleExpanded()`: Toggles the row's expanded state.
+    *   `getToggleExpandedHandler()`: Event handler for expansion toggling.
+    *   `subRows`: Array of child `Row` objects (if using expanding/grouping).
+    *   `getCanExpand()`: Returns `true` if the row can be expanded (based on `getSubRows` or `getRowCanExpand`).
+
+### 2.6 Cells (`cell`)
+
+*   Represent the intersection of a `Row` and a `Column`.
+*   Accessed via `row.getVisibleCells()`.
+*   **Key Cell Properties/Methods:**
+    *   `id`: Unique cell identifier (`${row.id}_${column.id}`).
+    *   `row`: Reference to the parent `Row` object.
+    *   `column`: Reference to the parent `Column` object.
+    *   `getValue()`: Gets the processed value for this specific cell.
+    *   `renderValue()`: Like `getValue`, but returns `renderFallbackValue` if the value is undefined.
+    *   `getContext()`: Returns context object (`{ table, column, row, cell, getValue, renderValue }`) needed for `flexRender`.
+    *   `getIsGrouped()`, `getIsAggregated()`, `getIsPlaceholder()`: Status flags for grouping features.
+
+### 2.7 Header Groups (`headerGroup`)
+
+*   Represent a "row" in the table header (`<thead>`). Multiple header groups exist if using nested/grouped columns.
+*   Accessed via `table.getHeaderGroups()`.
+*   **Key HeaderGroup Properties:**
+    *   `id`: Unique ID for the header group.
+    *   `depth`: The row index of this header group (0-based).
+    *   `headers`: An array of `Header` objects belonging to this group.
+
+### 2.8 Headers (`header`)
+
+*   Represent a single header cell (`<th>`). Analogous to `Cell` but for the header.
+*   Accessed via `headerGroup.headers`.
+*   **Key Header Properties/Methods:**
+    *   `id`: Unique header identifier.
+    *   `column`: Reference to the associated `Column` object.
+    *   `colSpan`: Number of columns the header should span (for grouped headers).
+    *   `rowSpan`: Number of rows the header should span (not commonly used by default).
+    *   `isPlaceholder`: `true` if the header fills a gap (e.g., due to `colSpan`).
+    *   `getContext()`: Returns context object (`{ table, header, column }`) needed for `flexRender`.
+    *   `getSize()`: Gets the calculated size of the header (sum of leaf column sizes).
+    *   `getResizeHandler()`: Event handler for column resizing.
+    *   `getStart()`, `getAfter()`: Offsets for positioning (useful for sticky headers).
+
+### 2.9 Columns (`column`)
+
+*   Represent a column definition applied to the table instance. Holds column-specific state and APIs.
+*   Accessed via `table.getColumn(id)`, `table.getAllColumns()`, `header.column`, `cell.column`.
+*   **Key Column Properties/Methods:**
+    *   `id`: Unique column identifier.
+    *   `columnDef`: Reference to the original `ColumnDef` object.
+    *   `getIsVisible()`: Returns `true` if the column is visible.
+    *   `toggleVisibility()`: Toggles the column's visibility.
+    *   `getToggleVisibilityHandler()`: Event handler for visibility toggling.
+    *   `getCanSort()`: Returns `true` if the column can be sorted.
+    *   `getIsSorted()`: Returns sort direction (`'asc'`, `'desc'`, or `false`).
+    *   `toggleSorting()`: Toggles the column's sorting state.
+    *   `getToggleSortingHandler()`: Event handler for sorting toggling.
+    *   `getCanFilter()`: Returns `true` if the column can be filtered.
+    *   `getFilterValue()`: Gets the current filter value for the column.
+    *   `setFilterValue()`: Sets the filter value for the column.
+    *   `getCanPin()`: Returns `true` if the column can be pinned.
+    *   `pin()`: Pins the column ('left', 'right', or `false` to unpin).
+    *   `getIsPinned()`: Returns pinning status (`'left'`, `'right'`, or `false`).
+    *   `getSize()`: Gets the current size of the column.
+    *   `resetSize()`: Resets the column size.
+
+## 3. State Management
+
+*   **Internal State:** By default, TanStack Table manages its own state internally. Access it via `table.getState()`.
+*   **Initial State:** Set default values for state slices using the `initialState` table option.
+
+    ```javascript
+    const table = useReactTable({
+      // ...
+      initialState: {
+        sorting: [{ id: 'lastName', desc: false }],
+        pagination: { pageIndex: 0, pageSize: 20 },
+      }
+    });
+    ```
+*   **Controlled State:** Manage specific state slices (or the entire state) in your application's scope. Requires providing both the `state` slice and the corresponding `on[StateName]Change` handler to the table options.
+
+    ```javascript
+    // React Example: Controlled Pagination
+    const [pagination, setPagination] = React.useState<PaginationState>({
+      pageIndex: 0,
+      pageSize: 10,
+    });
+
+    const table = useReactTable({
+      // ...
+      state: {
+        pagination, // Pass state *in*
+        // ... other controlled or uncontrolled states
+      },
+      onPaginationChange: setPagination, // Pass state *setter*
+      manualPagination: true, // Often used with controlled pagination for server-side data
+      rowCount: dataQuery.data?.rowCount, // Required for manual pagination
+    });
+    ```
+*   **Fully Controlled State:** Use `state` and `onStateChange` to manage the *entire* table state externally. Requires careful setup to provide initial values for all features.
+
+    ```javascript
+    // React Example: Fully Controlled (Simplified)
+    const [tableState, setTableState] = React.useState(table.initialState); // Start with defaults
+
+    table.setOptions(prev => ({
+      ...prev,
+      state: tableState,
+      onStateChange: setTableState,
+    }));
+    ```
+*   **`on[StateName]Change` Callbacks:** Receive an `updater` which can be the new state value *or* a function `(oldState) => newState`. Handle accordingly if adding custom logic.
+
+    ```javascript
+    onSortingChange: (updater) => {
+      // If updater is a function, call it with the old state
+      const newSortingValue = typeof updater === 'function'
+        ? updater(sorting) // assuming 'sorting' is your state variable
+        : updater;
+      // ... do something with newSortingValue
+      setSorting(newSortingValue); // Update your state
+    },
+    ```
+*   **Auto Resets:** State slices like `pageIndex` often reset automatically when related state (like filtering or data) changes. Disable this with `autoResetPageIndex: false` (and similar options for other features) if needed, e.g., when editing data in place. See the FAQ section in the docs for managing this with `skipAutoReset`.
+
+## 4. Rendering (`flexRender`)
+
+*   Since `header`, `cell`, and `footer` definitions can be strings, JSX/Components, or functions returning content, use the `flexRender` utility provided by the framework adapter to render them correctly.
+*   Pass the definition and the context object (`header.getContext()`, `cell.getContext()`) to `flexRender`.
+
+    ```jsx
+    // Header Rendering
+    <th>
+      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+    </th>
+
+    // Cell Rendering
+    <td>
+      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+    </td>
+
+    // Footer Rendering
+    <th>
+      {header.isPlaceholder ? null : flexRender(header.column.columnDef.footer, header.getContext())}
+    </th>
+    ```
+
+## 5. Key Features & APIs
+
+### 5.1 Sorting (`getSortedRowModel`)
+
+*   **State:** `sorting: SortingState` (`{ id: string, desc: boolean }[]`)
+*   **Options:** `enableSorting`, `manualSorting`, `onSortingChange`, `sortingFns`, `sortDescFirst`, `enableMultiSort`, `maxMultiSortColCount`, `isMultiSortEvent`.
+*   **ColumnDef:** `enableSorting`, `sortingFn`, `sortDescFirst`, `invertSorting`, `sortUndefined`.
+*   **Column API:** `getCanSort`, `getIsSorted`, `toggleSorting`, `getToggleSortingHandler`, `getNextSortingOrder`, `getSortIndex`.
+*   **Built-in `sortingFns`:** `alphanumeric`, `text`, `datetime`, `basic`. Custom functions possible.
+
+    ```jsx
+    // Basic Sorting Toggle in Header
+    <th onClick={header.column.getToggleSortingHandler()}>
+      {/* ... header content */}
+      {{ asc: ' 🔼', desc: ' 🔽' }[header.column.getIsSorted() as string] ?? null}
+    </th>
+    ```
+
+### 5.2 Filtering (`getFilteredRowModel`)
+
+*   **Column Filtering State:** `columnFilters: ColumnFiltersState` (`{ id: string, value: unknown }[]`)
+*   **Global Filtering State:** `globalFilter: any`
+*   **Options:** `enableFilters`, `manualFiltering`, `onColumnFiltersChange`, `onGlobalFilterChange`, `globalFilterFn`, `filterFns`, `filterFromLeafRows`.
+*   **ColumnDef:** `enableFiltering`, `filterFn`, `enableGlobalFilter`.
+*   **Column API:** `getCanFilter`, `getIsFiltered`, `getFilterValue`, `setFilterValue`, `getCanGlobalFilter`.
+*   **Table API:** `setColumnFilters`, `setGlobalFilter`.
+*   **Built-in `filterFns`:** `includesString`, `equalsString`, `arrIncludes`, `inNumberRange`, etc. Custom functions possible (e.g., `fuzzyFilter` using `rankItem`).
+
+    ```jsx
+    // Simple Text Filter Input for a Column
+    function Filter({ column }: { column: Column<any, unknown> }) {
+      const columnFilterValue = column.getFilterValue();
+      return (
+        <input
+          type="text"
+          value={(columnFilterValue ?? '') as string}
+          onChange={e => column.setFilterValue(e.target.value)}
+          placeholder={`Search...`}
+        />
+      );
+    }
+
+    // Global Filter Input
+    <input
+      value={globalFilter ?? ''} // Assuming globalFilter is controlled state
+      onChange={e => table.setGlobalFilter(e.target.value)}
+      placeholder="Search all columns..."
+    />
+    ```
+
+### 5.3 Pagination (`getPaginationRowModel`)
+
+*   **State:** `pagination: PaginationState` (`{ pageIndex: number, pageSize: number }`)
+*   **Options:** `manualPagination`, `onPaginationChange`, `pageCount`, `rowCount`, `autoResetPageIndex`.
+*   **Table API:** `setPagination`, `setPageIndex`, `setPageSize`, `previousPage`, `nextPage`, `firstPage`, `lastPage`, `getCanPreviousPage`, `getCanNextPage`, `getPageCount`, `getRowCount`.
+
+    ```jsx
+    // Basic Pagination Controls
+    <div>
+      <button onClick={() => table.firstPage()} disabled={!table.getCanPreviousPage()}>{'<<'}</button>
+      <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>{'<'}</button>
+      <span>Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</span>
+      <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>{'>'}</button>
+      <button onClick={() => table.lastPage()} disabled={!table.getCanNextPage()}>{'>>'}</button>
+      <select
+        value={table.getState().pagination.pageSize}
+        onChange={e => table.setPageSize(Number(e.target.value))}
+      >
+        {[10, 20, 50].map(size => <option key={size} value={size}>Show {size}</option>)}
+      </select>
+    </div>
+    ```
+
+### 5.4 Row Selection
+
+*   **State:** `rowSelection: RowSelectionState` (`Record<string, boolean>`)
+*   **Options:** `enableRowSelection`, `onRowSelectionChange`, `enableMultiRowSelection`, `enableSubRowSelection`, `getRowId`.
+*   **Table API:** `getIsAllRowsSelected`, `getIsSomeRowsSelected`, `toggleAllRowsSelected`, `getToggleAllRowsSelectedHandler`, `getSelectedRowModel`.
+*   **Row API:** `getIsSelected`, `getCanSelect`, `toggleSelected`, `getToggleSelectedHandler`.
+
+    ```jsx
+    // Select Checkbox Column
+    const columns = [
+      {
+        id: 'select',
+        header: ({ table }) => (
+          <IndeterminateCheckbox // Custom component assumed
+            checked={table.getIsAllRowsSelected()}
+            indeterminate={table.getIsSomeRowsSelected()}
+            onChange={table.getToggleAllRowsSelectedHandler()}
+          />
+        ),
+        cell: ({ row }) => (
+          <IndeterminateCheckbox
+            checked={row.getIsSelected()}
+            disabled={!row.getCanSelect()}
+            indeterminate={row.getIsSomeSelected()}
+            onChange={row.getToggleSelectedHandler()}
+          />
+        ),
+      },
+      // ... other columns
+    ]
+    ```
+
+### 5.5 Expanding (`getExpandedRowModel`)
+
+*   **State:** `expanded: ExpandedState` (`true | Record<string, boolean>`)
+*   **Options:** `onExpandedChange`, `getSubRows`, `getRowCanExpand`, `manualExpanding`, `paginateExpandedRows`.
+*   **Row API:** `getIsExpanded`, `getCanExpand`, `toggleExpanded`, `getToggleExpandedHandler`, `depth`, `subRows`.
+*   **Use Cases:** Hierarchical data (sub-rows) or detail panels (sub-components).
+
+    ```jsx
+    // Expander Cell
+    cell: ({ row }) => (
+      row.getCanExpand() ? (
+        <button onClick={row.getToggleExpandedHandler()}>
+          {row.getIsExpanded() ? '👇' : '👉'}
+        </button>
+      ) : null
+    ),
+
+    // Rendering Sub-Component (Detail Panel)
+    <tbody>
+      {table.getRowModel().rows.map(row => (
+        <React.Fragment key={row.id}>
+          <tr>{/* Normal row cells */}</tr>
+          {row.getIsExpanded() && (
+            <tr>
+              <td colSpan={row.getVisibleCells().length}>
+                <YourDetailPanelComponent row={row} />
+              </td>
+            </tr>
+          )}
+        </React.Fragment>
+      ))}
+    </tbody>
+    ```
+
+### 5.6 Column Visibility
+
+*   **State:** `columnVisibility: VisibilityState` (`Record<string, boolean>`)
+*   **Options:** `onColumnVisibilityChange`, `enableHiding`.
+*   **ColumnDef:** `enableHiding`.
+*   **Column API:** `getIsVisible`, `getCanHide`, `toggleVisibility`, `getToggleVisibilityHandler`.
+*   **Table API:** `getVisibleLeafColumns`, `getIsAllColumnsVisible`, `toggleAllColumnsVisible`, `getToggleAllColumnsVisibilityHandler`.
+*   **Row API:** `getVisibleCells`. **Important:** Use `getVisible*` APIs when rendering to respect visibility state.
+
+    ```jsx
+    // Visibility Toggle UI
+    <div>
+      <label>
+        <input type="checkbox" checked={table.getIsAllColumnsVisible()} onChange={table.getToggleAllColumnsVisibilityHandler()} /> Toggle All
+      </label>
+      {table.getAllLeafColumns().map(column => (
+        <label key={column.id}>
+          <input type="checkbox" checked={column.getIsVisible()} onChange={column.getToggleVisibilityHandler()} disabled={!column.getCanHide()} /> {column.id}
+        </label>
+      ))}
+    </div>
+
+    // Rendering visible cells
+    <tbody>
+      {table.getRowModel().rows.map(row => (
+        <tr key={row.id}>
+          {row.getVisibleCells().map(cell => ( // Use getVisibleCells!
+            <td key={cell.id}>{/* ... */}</td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+    ```
+
+### 5.7 Column Ordering
+
+*   **State:** `columnOrder: ColumnOrderState` (`string[]`)
+*   **Options:** `onColumnOrderChange`.
+*   **Table API:** `setColumnOrder`, `resetColumnOrder`.
+*   **Column API:** `getIndex`.
+*   Affects order of unpinned columns. Pinning takes precedence. Grouping (`groupedColumnMode: 'reorder'`) happens after ordering.
+
+    ```javascript
+    // Example: Randomize column order
+    const randomizeColumns = () => {
+      table.setColumnOrder(
+        faker.helpers.shuffle(table.getAllLeafColumns().map(d => d.id)) // Using faker for shuffle
+      );
+    };
+    ```
+
+### 5.8 Column Pinning
+
+*   **State:** `columnPinning: ColumnPinningState` (`{ left?: string[], right?: string[] }`)
+*   **Options:** `onColumnPinningChange`, `enableColumnPinning`.
+*   **ColumnDef:** `enablePinning`.
+*   **Column API:** `pin`, `getIsPinned`, `getCanPin`, `getStart`, `getAfter`.
+*   **Table API:** `getLeftHeaderGroups`, `getCenterHeaderGroups`, `getRightHeaderGroups`, `getLeftLeafColumns`, etc.
+*   **Implementation:** Can split into multiple tables or use sticky positioning. Sticky requires careful CSS (`position: sticky`, `left`, `right`, `z-index`, `box-shadow`, `border-collapse: separate`).
+
+    ```jsx
+    // Pinning Controls in Header
+    {!header.isPlaceholder && header.column.getCanPin() && (
+      <div>
+        {header.column.getIsPinned() !== 'left' && <button onClick={() => header.column.pin('left')}>{'<='}</button>}
+        {header.column.getIsPinned() && <button onClick={() => header.column.pin(false)}>X</button>}
+        {header.column.getIsPinned() !== 'right' && <button onClick={() => header.column.pin('right')}>{'=>'}</button>}
+      </div>
+    )}
+
+    // Applying Sticky Styles (Conceptual)
+    const getCommonPinningStyles = (column: Column<Person>): CSSProperties => {
+      const isPinned = column.getIsPinned();
+      return {
+        left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
+        right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
+        position: isPinned ? 'sticky' : 'relative',
+        zIndex: isPinned ? 1 : 0,
+        // ... other styles like background, box-shadow
+      };
+    };
+
+    <th style={getCommonPinningStyles(header.column)}>...</th>
+    <td style={getCommonPinningStyles(cell.column)}>...</td>
+    ```
+
+### 5.9 Column Sizing
+
+*   **State:** `columnSizing: ColumnSizing` (`Record<string, number>`), `columnSizingInfo: ColumnSizingInfoState`.
+*   **Options:** `enableColumnResizing`, `columnResizeMode` (`'onChange'` | `'onEnd'`), `columnResizeDirection` (`'ltr'` | `'rtl'`).
+*   **ColumnDef:** `size`, `minSize`, `maxSize`, `enableResizing`.
+*   **Column API:** `getSize`, `getCanResize`, `getIsResizing`, `resetSize`, `getStart`, `getAfter`.
+*   **Header API:** `getSize`, `getStart`, `getResizeHandler`.
+*   **Performance:** For complex tables (especially React), use `columnResizeMode: 'onEnd'` or implement performance optimizations (CSS variables, memoization). See `column-resizing-performant` example.
+
+    ```jsx
+    // Resizer Handle in Header
+    <th style={{ width: header.getSize() }}>
+      {/* ... header content */}
+      {header.column.getCanResize() && (
+        <div
+          onMouseDown={header.getResizeHandler()}
+          onTouchStart={header.getResizeHandler()}
+          className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+        />
+      )}
+    </th>
+    ```
+
+### 5.10 Grouping (`getGroupedRowModel`)
+
+*   **State:** `grouping: GroupingState` (`string[]`)
+*   **Options:** `onGroupingChange`, `manualGrouping`, `getGroupedRowModel`, `groupedColumnMode` (`'reorder'` | `'remove'` | `false`), `aggregationFns`.
+*   **ColumnDef:** `aggregationFn`, `aggregatedCell`, `enableGrouping`, `getGroupingValue`.
+*   **Column API:** `getIsGrouped`, `toggleGrouping`, `getToggleGroupingHandler`, `getGroupedIndex`.
+*   **Row API:** `getIsGrouped`, `groupingColumnId`, `groupingValue`.
+*   **Cell API:** `getIsGrouped`, `getIsAggregated`, `getIsPlaceholder`.
+
+    ```jsx
+    // Grouping Toggle in Header
+    {header.column.getCanGroup() && (
+      <button onClick={header.column.getToggleGroupingHandler()}>
+        {header.column.getIsGrouped() ? `🛑(${header.column.getGroupedIndex()})` : `👊`}
+      </button>
+    )}
+
+    // Rendering Grouped/Aggregated Cells
+    <td>
+      {cell.getIsGrouped() ? (
+        <>
+          <button onClick={row.getToggleExpandedHandler()}>
+            {row.getIsExpanded() ? '👇' : '👉'}
+          </button>{' '}
+          {flexRender(cell.column.columnDef.cell, cell.getContext())} ({row.subRows.length})
+        </>
+      ) : cell.getIsAggregated() ? (
+        flexRender(cell.column.columnDef.aggregatedCell ?? cell.column.columnDef.cell, cell.getContext())
+      ) : cell.getIsPlaceholder() ? null : (
+        flexRender(cell.column.columnDef.cell, cell.getContext())
+      )}
+    </td>
+    ```
+
+### 5.11 Faceting (`getFacetedRowModel`, `getFacetedUniqueValues`, `getFacetedMinMaxValues`)
+
+*   Used to derive unique values or min/max ranges for a column, often for building filter UIs.
+*   **Column API:** `getFacetedUniqueValues`, `getFacetedMinMaxValues`, `getFacetedRowModel`.
+*   **Table API:** `getGlobalFacetedUniqueValues`, `getGlobalFacetedMinMaxValues`.
+
+    ```jsx
+    // Example: Building select options from unique values
+    const Filter = ({ column }) => {
+      const facetedUniqueValues = column.getFacetedUniqueValues();
+      const sortedUniqueValues = useMemo(
+        () => Array.from(facetedUniqueValues.keys()).sort(),
+        [facetedUniqueValues]
+      );
+
+      return (
+        <select onChange={e => column.setFilterValue(e.target.value)} value={column.getFilterValue() || ''}>
+          <option value="">All</option>
+          {sortedUniqueValues.map(value => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
+      );
+    }
+    ```
+
+### 5.12 Virtualization
+
+*   Not built-in, but integrates well with libraries like **TanStack Virtual**.
+*   Requires managing scroll containers and passing measurements to the virtualizer.
+*   Examples provided show strategies for virtualizing rows (fixed and dynamic height) and columns.
+*   Key concepts: `useVirtualizer`, estimating item sizes, measuring dynamic sizes, rendering only visible items with absolute positioning (`transform: translateY(...)`) for rows, or padding columns for column virtualization.
+
+    ```jsx
+    // React Row Virtualization Snippet (Conceptual)
+    import { useVirtualizer } from '@tanstack/react-virtual';
+
+    const tableContainerRef = React.useRef<HTMLDivElement>(null);
+    const { rows } = table.getRowModel();
+
+    const rowVirtualizer = useVirtualizer({
+      count: rows.length,
+      getScrollElement: () => tableContainerRef.current,
+      estimateSize: () => 33, // Or your estimated row height
+      overscan: 5,
+    });
+
+    // In tbody:
+    <tbody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+      {rowVirtualizer.getVirtualItems().map(virtualRow => {
+        const row = rows[virtualRow.index];
+        return (
+          <tr
+            key={row.id}
+            ref={node => rowVirtualizer.measureElement(node)} // For dynamic height
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
+          >
+            {/* Render cells */}
+          </tr>
+        );
+      })}
+    </tbody>
+    ```
+
+### 5.13 Custom Features
+
+*   Extend TanStack Table by providing custom feature objects via the `_features` table option.
+*   Allows adding custom state, options, and instance APIs (table, column, row, cell, header).
+*   Requires defining types and using TypeScript declaration merging for full type safety.
+*   See `custom-features` example for a density toggle implementation.
+
+    ```typescript
+    // 1. Define Types
+    interface MyFeatureState { myState: string; }
+    interface MyFeatureOptions { onMyStateChange?: OnChangeFn<string>; }
+    interface MyFeatureInstance { setMyState: (updater: Updater<string>) => void; }
+
+    // 2. Merge Declarations
+    declare module '@tanstack/react-table' {
+      interface TableState extends MyFeatureState {}
+      interface TableOptionsResolved<TData extends RowData> extends MyFeatureOptions {}
+      interface Table<TData extends RowData> extends MyFeatureInstance {}
+    }
+
+    // 3. Create Feature Object
+    const MyFeature: TableFeature<any> = {
+      getInitialState: (state) => ({ ...state, myState: 'initial' }),
+      getDefaultOptions: (table) => ({ onMyStateChange: makeStateUpdater('myState', table) }),
+      createTable: (table) => {
+        table.setMyState = (updater) => table.options.onMyStateChange?.(updater);
+      },
+    };
+
+    // 4. Add to Table
+    const table = useReactTable({
+      // ...
+      _features: [MyFeature],
+      state: { myState }, // If controlled
+      onMyStateChange: setMyState, // If controlled
+    });
+
+    // 5. Use
+    // table.setMyState('new value');
+    // const currentState = table.getState().myState;
+    ```
+
+## 6. Best Practices & Performance
+
+*   **Stable References:** Always provide stable references for `data` and `columns` arrays (use `useMemo`, `useState`, etc. in React).
+*   **Memoization:** Memoize expensive calculations or components, especially cell renderers if they are complex. React's `React.memo` can be useful.
+*   **Column Resizing Performance:** Use `columnResizeMode: 'onEnd'` or implement optimizations like CSS variables and memoized table bodies if using `'onChange'` with complex tables.
+*   **Virtualization:** Use virtualization for very large datasets (thousands/tens of thousands of rows) instead of client-side pagination if feasible for your UX.
+*   **Controlled State:** Only control the state slices you absolutely need access to outside the table instance. Controlling frequently changing state like `columnSizingInfo` can impact performance if not managed carefully.
+*   **Use `getValue()`/`renderValue()`:** Access cell/row values via these methods for caching benefits.
+*   **Use `flexRender`:** Reliably render `header`, `cell`, and `footer` definitions.
+*   **Use `getVisible*` APIs:** When rendering, use APIs like `getVisibleLeafColumns` and `getVisibleCells` to respect column visibility state.
+
+This summary covers the fundamental aspects and common patterns for using TanStack Table V8 effectively. Refer to the specific guides and API documentation for more in-depth details on each feature.
+```

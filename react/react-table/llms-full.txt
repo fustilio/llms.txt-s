@@ -1,0 +1,1683 @@
+# TanStack Table v8 Documentation Compilation
+
+## Getting Started
+
+### Introduction
+
+TanStack Table is a Headless UI library for building powerful tables & datagrids for TS/JS, React, Vue, Solid, Qwik, and Svelte.
+
+**What is "headless" UI?**
+Headless UI libraries provide logic, state, processing, and API for UI elements but do not provide markup, styles, or pre-built implementations. Goals include:
+- Decoupling logic from UI for modularity and reusability.
+- Supporting custom branding and styling without massive API surfaces.
+- Handling complex data-processing, state-management, and business logic, leaving UI implementation to the developer.
+
+**Component-based vs Headless Libraries:**
+- **Component-based (e.g., AG Grid):** Provide drop-in solutions with markup/styles. Pros: Ready-to-use, little setup. Cons: Less control, larger bundles, framework coupling. Good if design/bundle-size are not hard requirements.
+- **Headless (e.g., TanStack Table):** Provide functions, state, utilities. Pros: Full control, supports all styling, smaller bundles, portable. Cons: More setup, no built-in UI. Good for lighter-weight tables or full design control.
+
+### Overview
+
+TanStack Table's core is framework agnostic. Adapters make integration easier.
+
+**TypeScript:** Optional but recommended for type safety and autocomplete.
+
+**Headless:** Doesn't render DOM elements; relies on the developer for markup and styles.
+
+**Agnostic:**
+1.  **Framework Agnostic:** Use with any JS framework (React, Vue, Solid, Svelte, Qwik, Angular adapters provided).
+2.  **CSS / Component Library Agnostic:** Use with any styling strategy (Tailwind, Material UI, Bootstrap, custom).
+
+**Core Objects and Types:**
+- Data: The core data array.
+- Column Defs: Configure columns, data model, display templates.
+- Table Instance: Core object with state and API.
+- Row Models: How data is transformed (filtering, sorting, etc.).
+- Rows: Mirror data, provide row-specific APIs.
+- Cells: Mirror row-column intersection, provide cell-specific APIs.
+- Header Groups: Computed slices of nested header levels.
+- Headers: Associated with column defs, provide header-specific APIs.
+- Columns: Mirror column defs, provide column-specific APIs.
+
+**Features:**
+Column Faceting, Column Filtering, Column Grouping, Column Ordering, Column Pinning, Column Sizing, Column Visibility, Global Faceting, Global Filtering, Row Expanding, Row Pagination, Row Pinning, Row Selection, Row Sorting.
+Also supports Virtualization (via external libraries like TanStack Virtual) and Custom Features (plugins).
+
+### Installation
+
+Install the adapter for your framework:
+
+**React Table:**
+```bash
+npm install @tanstack/react-table
+```
+Works with React 16.8+. (May need updates for React Compiler).
+
+**Vue Table:**
+```bash
+npm install @tanstack/vue-table
+```
+Works with Vue 3.
+
+**Solid Table:**
+```bash
+npm install @tanstack/solid-table
+```
+Works with Solid-JS 1.
+
+**Svelte Table:**
+```bash
+npm install @tanstack/svelte-table
+```
+Works with Svelte 3 and 4. (Svelte 5 needs core + custom adapter).
+
+**Qwik Table:**
+```bash
+npm install @tanstack/qwik-table
+```
+Works with Qwik 1 (CSR only currently).
+
+**Angular Table:**
+```bash
+npm install @tanstack/angular-table
+```
+Works with Angular 17 (uses Signals).
+
+**Lit Table:**
+```bash
+npm install @tanstack/lit-table
+```
+Works with Lit 3.
+
+**Table Core (no framework):**
+```bash
+npm install @tanstack/table-core
+```
+Use this to build custom adapters.
+
+### Migrating to V8
+
+V8 is a major rewrite from v7 in TypeScript.
+
+**Notable Changes:**
+- Full TypeScript rewrite.
+- Plugin system removed for inversion of control.
+- Larger API, new features (e.g., pinning).
+- Better state management and server-side support.
+- Optional data pipeline control.
+- Agnostic core with framework adapters.
+- New Dev Tools.
+
+**Steps:**
+1.  **Install:**
+    ```bash
+    npm uninstall react-table @types/react-table
+    npm install @tanstack/react-table
+    ```
+2.  **Update Imports:**
+    ```diff
+    - import { useTable } from 'react-table'
+    + import { useReactTable } from '@tanstack/react-table'
+    ```
+3.  **Update Table Options:**
+    - Rename `useTable` to `useReactTable`.
+    - Replace plugin hooks with tree-shakable row model imports.
+    ```diff
+    - import { useTable, usePagination, useSortBy } from 'react-table';
+    + import {
+    +   useReactTable,
+    +   getCoreRowModel,
+    +   getPaginationRowModel,
+    +   getSortedRowModel
+    + } from '@tanstack/react-table';
+
+    -   const tableInstance = useTable(
+    -     { columns,  data },
+    -     useSortBy,
+    -     usePagination, //order mattered
+    -   );
+    +   const tableInstance = useReactTable({
+    +     columns,
+    +     data,
+    +     getCoreRowModel: getCoreRowModel(),
+    +     getPaginationRowModel: getPaginationRowModel(),
+    +     getSortedRowModel: getSortedRowModel(), //order doesn't matter
+    +   });
+    ```
+    - Rename `disable*` options to `enable*` (e.g., `disableSortBy` -> `enableSorting`).
+4.  **Update Column Definitions:**
+    - `accessor` -> `accessorKey` (string) or `accessorFn` (function).
+    - `width`, `minWidth`, `maxWidth` -> `size`, `minSize`, `maxSize`.
+    - Optionally use `createColumnHelper` for type safety.
+    ```diff
+    -  { accessor: 'firstName', Header: 'First Name' }
+    +  columnHelper.accessor('firstName', { header: 'First Name' })
+    // OR
+    + { accessorKey: 'firstName', header: 'First Name' }
+    ```
+    - Rename options: `Header` -> `header`, `Cell` -> `cell`, `Footer` -> `footer`.
+    - Rename `disable*` column options to `enable*`.
+    - `sortType` -> `sortingFn`.
+    - Cell renderer changes: `value` -> `getValue()`, `cell.isGrouped` -> `cell.getIsGrouped()`, etc.
+5.  **Migrate Table Markup:**
+    - Use `flexRender(component, props)` instead of `cell.render('Cell')`, `column.render('Header')`.
+    - `get*Props` methods are deprecated. Define `key`, `onClick`, `colSpan`, styles, accessibility attributes manually.
+    - Use `get*Handler` helpers for events (e.g., `getToggleAllRowsSelectedHandler`).
+    ```diff
+    - <th {...header.getHeaderProps()}>{cell.render('Header')}</th>
+    + <th colSpan={header.colSpan} key={column.id}>
+    +   {flexRender(header.column.columnDef.header, header.getContext())}
+    + </th>
+    ```
+    ```diff
+    - <td {...cell.getCellProps()}>{cell.render('Cell')}</td>
+    + <td key={cell.id}>
+    +   {flexRender(cell.column.columnDef.cell, cell.getContext())}
+    + </td>
+    ```
+6.  **Other Changes:**
+    - Custom `filterTypes` (now `filterFns`) signature changed: `(rows, id, filterValue) => Row[]` -> `(row, id, filterValue) => boolean`.
+
+### FAQ
+
+**How do I stop infinite rendering loops?**
+- **Cause:** Unstable references for `columns`, `data`, or `state` passed to `useReactTable`. React re-renders, these objects are recreated, causing TanStack Table to reprocess, triggering another render.
+- **Solution 1 (Stable References):** Define `columns`/`data` outside the component, or use `useMemo`/`useState` inside.
+  ```jsx
+  // GOOD: Stable references
+  const columns = useMemo(() => [...], []);
+  const [data, setData] = useState(() => [...]);
+  const table = useReactTable({ columns, data });
+  ```
+- **Solution 2 (Memoize Transformations):** If filtering/transforming data passed to the table, memoize the result.
+  ```jsx
+  const filteredData = useMemo(() => data?.filter(...) ?? [], [data]);
+  const table = useReactTable({ columns,  filteredData });
+  ```
+
+**How do I stop my table state from automatically resetting when my data changes?**
+- **Problem:** Features like pagination reset state (e.g., `pageIndex`) when `data` changes. This might be undesirable when filtering externally or editing data.
+- **Solution:** Use `autoReset*` options (e.g., `autoResetPageIndex: false`). For temporary suppression during updates:
+  ```jsx
+  // React example using a ref to skip reset
+  const skipPageResetRef = React.useRef(false);
+
+  const updateData = newData => {
+    skipPageResetRef.current = true; // Disable auto reset
+    setData(newData);
+  };
+
+  React.useEffect(() => {
+    skipPageResetRef.current = false; // Re-enable after update
+  });
+
+  useReactTable({
+    // ...
+    autoResetPageIndex: !skipPageResetRef.current,
+    autoResetExpanded: !skipPageResetRef.current,
+    // ... other autoReset options
+  });
+  ```
+  (See `useSkipper` hook in kitchen-sink example for a reusable version).
+
+## Core Guides
+
+### Data
+
+- `data` is the array of objects passed to the table.
+- Define a TypeScript type for your data (`TData`). This enables type safety throughout the table.
+  ```ts
+  type User = { firstName: string; lastName: string; age: number; /*...*/ };
+  const  User[] = [/*...*/];
+  ```
+- **Deep Keys:** Access nested data using dot notation (`accessorKey: 'name.first'`) or an `accessorFn`.
+- **Sub-Rows:** For expanding/grouping, define nested data (e.g., `subRows?: User[]`) and use `options.getSubRows`.
+- **Stable Reference:** `data` MUST have a stable reference (defined outside component, `useMemo`, `useState`, state management library) to prevent infinite loops in React.
+- **Performance:** TanStack Table can handle large client-side datasets (10s of thousands of rows) efficiently for sorting, filtering, etc., but test with your actual data. Server-side operations are an alternative for very large datasets.
+
+### Column Defs
+
+- Define how columns access data, format display, and configure features.
+- **Types:**
+    - `Accessor Columns`: Have a data model (sortable, filterable).
+    - `Display Columns`: No data model (for actions, checkboxes).
+    - `Grouping Columns`: Group other columns (no data model).
+- **Column Helpers:** Use `createColumnHelper<TData>()` for type safety.
+  ```ts
+  import { createColumnHelper } from '@tanstack/react-table';
+  type Person = { /* ... */ };
+  const columnHelper = createColumnHelper<Person>();
+
+  const columns = [
+    columnHelper.accessor('firstName', { /* options */ }),
+    columnHelper.accessor(row => row.lastName, { id: 'lastName', /* options */ }),
+    columnHelper.display({ id: 'actions', /* options */ }),
+    columnHelper.group({ header: 'Name', columns: [/*...*/] }),
+  ];
+  ```
+- **Creating Accessor Columns:**
+    - `accessorKey`: String key (e.g., `'firstName'`, `'name.first'`).
+    - `accessorFn`: Function `(originalRow, index) => value`.
+- **Unique Column IDs:** Required. Derived from `accessorKey`, `id` property, or string `header`.
+- **Formatting & Rendering:**
+    - `cell`: Function `(props) => ReactNode | string | etc.`. Access value via `props.getValue()`. Access row via `props.row`.
+    - `header`: String or function `(props) => ReactNode | string | etc.`.
+    - `footer`: String or function `(props) => ReactNode | string | etc.`.
+    - Use `flexRender(Component, props)` utility for rendering.
+
+### Table Instance
+
+- The core object returned by `useReactTable` (or framework equivalent). Contains state and APIs.
+- **Creation:** Requires `columns`, `data`, `getCoreRowModel`.
+  ```ts
+  import { useReactTable, getCoreRowModel } from '@tanstack/react-table';
+  const table = useReactTable({ columns, data, getCoreRowModel: getCoreRowModel() });
+  ```
+- **Table State:** Accessed via `table.getState()`. Managed internally or controlled via `state` and `onStateChange` options.
+- **Table APIs:** Methods on the `table` instance to interact with state and features (e.g., `setSorting`, `getRowModel`).
+- **Row Models:** Special APIs (`table.getRowModel()`, `table.getFilteredRowModel()`, etc.) to access rows processed by features.
+
+### Row Models
+
+- Transform original `data` based on features (filtering, sorting, pagination, grouping, expanding).
+- **Importing:** Import necessary row model generators (e.g., `getFilteredRowModel`, `getSortedRowModel`).
+  ```ts
+  import { getCoreRowModel, getFilteredRowModel, /*...*/ } from '@tanstack/react-table';
+  const table = useReactTable({
+    // ...
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    // ... other models
+  });
+  ```
+- **Order of Execution:** `Core` -> `Filtered` -> `Grouped` -> `Sorted` -> `Expanded` -> `Pagination` -> `Final (getRowModel)`.
+- **Accessing:** Use `table.getRowModel()` for rendering. Other models (`getPre*`, `get*Selected*`) available for specific states.
+- **Structure:** Each model provides:
+    - `rows`: Array of rows at the current level.
+    - `flatRows`: Flattened array including all sub-rows.
+    - `rowsById`: Object keyed by row ID for quick lookup.
+
+### Rows
+
+- Represent a single row of data after processing.
+- **Accessing Rows:** Via `table.getRowModel().rows`, `table.getSelectedRowModel().rows`, `table.getRow(id)`.
+- **Row IDs (`row.id`):** Unique identifier. Defaults to index. Override with `options.getRowId` (e.g., `getRowId: row => row.uuid`).
+- **Accessing Values:**
+    - `row.getValue(columnId)`: Get processed value for a column.
+    - `row.renderValue(columnId)`: Get value or fallback.
+    - `row.original`: Access the original data object for the row.
+- **Sub Rows (Expanding/Grouping):**
+    - `row.subRows`: Array of child rows.
+    - `row.depth`: Nesting level (0 = root).
+    - `row.parentId`: ID of the parent row.
+    - `row.getParentRow()`: Get the parent row object.
+
+### Cells
+
+- Represent the intersection of a row and a column.
+- **Accessing Cells:** Via `row.getVisibleCells()`, `row.getAllCells()`.
+- **Cell IDs (`cell.id`):** Unique ID `${row.id}_${column.id}`.
+- **Parent Objects:** `cell.row`, `cell.column`.
+- **Accessing Values:**
+    - `cell.getValue()`: Get processed cell value (shortcut for `row.getValue(cell.column.id)`).
+    - `cell.renderValue()`: Get value or fallback.
+- **Rendering:** Use `flexRender(cell.column.columnDef.cell, cell.getContext())` to render using the `cell` definition.
+
+### Header Groups
+
+- Represent rows of headers, especially in grouped/nested header scenarios.
+- **Accessing:** Via `table.getHeaderGroups()`, `table.get[Left/Center/Right]HeaderGroups()` (for pinning).
+- **Properties:**
+    - `id`: Unique ID based on depth.
+    - `depth`: Row index (0-based) among header rows.
+    - `headers`: Array of `Header` objects in this group/row.
+- **Rendering:** Map over `headerGroup.headers` to render `<th>` elements.
+
+### Headers
+
+- Represent a single header cell, potentially spanning multiple columns/rows.
+- **Accessing:** Via `headerGroup.headers`.
+- **Properties:**
+    - `id`: Unique ID.
+    - `depth`: Header group row index.
+    - `colSpan`: Number of columns spanned.
+    - `rowSpan`: Number of rows spanned (not fully implemented by default).
+    - `column`: Associated `Column` object.
+    - `headerGroup`: Associated `HeaderGroup` object.
+    - `subHeaders`: Child headers in hierarchy.
+    - `isPlaceholder`: Boolean if it's a placeholder cell (due to grouping/visibility).
+    - `placeholderId`: Unique ID if it's a placeholder.
+- **Rendering:** Use `flexRender(header.column.columnDef.header, header.getContext())`.
+
+### Columns
+
+- Represent a single column definition applied to the table instance. Contains APIs related to the column across all rows.
+- **Accessing:** Via `table.getColumn(id)`, `table.getAllColumns()`, `table.getAllLeafColumns()`, `cell.column`, `header.column`.
+- **Properties:**
+    - `id`: Unique column ID.
+    - `columnDef`: Original column definition object.
+    - `depth`: Column group depth.
+    - `parent`: Parent column object if grouped.
+    - `columns`: Child columns if it's a group column.
+- **APIs:** Dozens of APIs related to features (sorting, filtering, visibility, sizing, pinning, etc.) are attached here (e.g., `column.toggleSorting()`, `column.getIsVisible()`).
+- **Rendering:** Do NOT use `column` objects directly to render headers or cells. Use `header` and `cell` objects instead. Use `column` objects for interacting with column state (e.g., building a visibility toggle menu).
+
+### Table State (React Example)
+
+- TanStack Table manages state internally by default. Access via `table.getState()`.
+- **Initial State:** Set defaults using `initialState` option (e.g., `initialState: { sorting: [...] }`). `initialState` is only used on mount or reset, not for updates.
+- **Controlled State:** Manage specific state slices yourself by providing both the `state` value and the `on[State]Change` handler.
+  ```jsx
+  const [sorting, setSorting] = React.useState([]);
+  const table = useReactTable({
+    // ...
+    state: { sorting }, // Pass controlled state
+    onSortingChange: setSorting, // Provide updater
+  });
+  ```
+- **Fully Controlled State:** Manage the *entire* table state using `state` and `onStateChange`. Requires careful setup to initialize all needed state properties. Can have performance implications if frequently changing state is lifted high up the component tree.
+  ```jsx
+  // Initial setup might need table.setOptions after initial render
+  const [state, setState] = React.useState(table.initialState);
+  table.setOptions(prev => ({
+    ...prev,
+    state,
+    onStateChange: setState,
+  }));
+  ```
+- **`on[State]Change` Callbacks:**
+    - MUST have the corresponding state value passed in the `state` option.
+    - Receive an updater function or a raw value, similar to React's `setState`. Handle accordingly if adding extra logic.
+    ```jsx
+    onSortingChange: (updater) => {
+      const newSortingValue = updater instanceof Function ? updater(sorting) : updater;
+      // ... custom logic ...
+      setSorting(newSortingValue); // Or pass updater directly: setSorting(updater)
+    }
+    ```
+- **State Types:** Import specific state types (e.g., `SortingState`, `PaginationState`) for type safety when controlling state.
+
+## Feature Guides
+
+### Column Ordering
+
+- Manually specify column order using `columnOrder` state (array of column IDs).
+- **Order of Operations:** 1. Pinning -> 2. Ordering -> 3. Grouping. `columnOrder` only affects unpinned columns if pinning is active.
+- **State:**
+    - `initialState: { columnOrder: [...] }` for default order.
+    - Control state with `state: { columnOrder }` and `onColumnOrderChange`.
+- **Drag and Drop (React):**
+    - Avoid `react-dnd` in React 18+.
+    - Recommended: `@dnd-kit/core` and `@dnd-kit/sortable`. See `column-dnd` example.
+    - Use `SortableContext` and `useSortable` hook.
+    - Update `columnOrder` state in `onDragEnd` using `arrayMove`.
+
+### Column Pinning
+
+- Freeze columns to the left or right.
+- **Order of Operations:** Pinning is applied first. `columnOrder` state only affects unpinned ("center") columns.
+- **State (`columnPinning`):** `{ left?: string[], right?: string[] }`. Manage via `state`/`onColumnPinningChange` or use `initialState`.
+- **Implementation Strategies:**
+    - **Split Tables:** Use `getLeft/Center/RightHeaderGroups` and `getLeft/Center/RightVisibleCells` to render separate tables.
+    - **Sticky CSS:** Use `position: sticky` with calculated `left`/`right` offsets from `column.getStart()` / `column.getAfter()`. Add `box-shadow` for visual separation using `column.getIsFirstColumn()` / `column.getIsLastColumn()`. Requires `border-collapse: separate` on `<table>`.
+- **APIs:** `column.pin('left' | 'right' | false)`, `column.getIsPinned()`, `column.getCanPin()`.
+
+### Column Sizing
+
+- Specify column widths (`size`, `minSize`, `maxSize`). Defaults: `size: 150`, `minSize: 20`, `maxSize: Infinity`. Override via `defaultColumn` or individual column defs.
+- **Resizing:**
+    - Enable/disable via `enableColumnResizing` (table/column option).
+    - `columnResizeMode`: `'onEnd'` (default, updates state on drag end) or `'onChange'` (updates during drag). `'onChange'` might require performance optimizations in React.
+    - `columnResizeDirection`: `'ltr'` (default) or `'rtl'`.
+    - **UI Hookup:** Use `header.getResizeHandler()` for `onMouseDown`/`onTouchStart` on a resize handle element.
+    - Apply size using `header.getSize()` (e.g., `style={{ width: header.getSize() }}`).
+    - Use `table.getState().columnSizingInfo.deltaOffset` and `column.getIsResizing()` for visual feedback during resize (especially in `'onEnd'` mode).
+- **Performance (React):**
+    - Avoid calling `getSize()` in every cell/header render. Calculate all sizes once using `useMemo` at the table level.
+    - Pass sizes down via CSS variables applied to the `<table>` element.
+    - Memoize the `TableBody` component during resize (`React.memo`). See `column-resizing-performant` example.
+
+### Column Visibility
+
+- Show/hide columns dynamically.
+- **State (`columnVisibility`):** `{ columnId1: true, columnId2: false, ... }`. Manage via `state`/`onColumnVisibilityChange` or use `initialState`.
+- **Disable Hiding:** Set `enableHiding: false` in column def. Check with `column.getCanHide()`.
+- **Toggle APIs:** `column.toggleVisibility(value?)`, `column.getToggleVisibilityHandler()`, `table.toggleAllColumnsVisibility(value?)`, `table.getToggleAllColumnsVisibilityHandler()`.
+- **Visibility Aware APIs:** Use `getVisible*` variants when rendering: `table.getVisibleLeafColumns()`, `row.getVisibleCells()`. Header groups (`getHeaderGroups`) are already visibility-aware.
+
+### Column Filtering
+
+- Filter rows based on individual column values.
+- **Client-Side vs Server-Side:** Choose based on data size and performance needs. Client-side can handle thousands of rows well. Server-side requires `manualFiltering: true`.
+- **Client-Side Setup:** Requires `getFilteredRowModel: getFilteredRowModel()`.
+- **State (`columnFilters`):** `[{ id: string, value: unknown }]`. Manage via `state`/`onColumnFiltersChange` or use `initialState`.
+- **Filter Functions (`filterFn`):**
+    - Built-in: `includesString`, `equalsString`, `arrIncludes`, `inNumberRange`, etc. (case-sensitive variants available).
+    - Custom: Define in `filterFns` table option or directly in column def. Signature: `(row, columnId, filterValue, addMeta) => boolean`.
+    - Customization: Add `resolveFilterValue` (sanitize input) or `autoRemove` (remove filter if value is falsy) to custom `filterFn`.
+- **UI:** Build filter inputs (e.g., text input, range slider, select). Use `column.getFilterValue()`, `column.setFilterValue()`.
+- **Disabling:** `enableColumnFilter: false` (column), `enableColumnFilters: false` (table). Check with `column.getCanFilter()`.
+- **Sub-Rows:**
+    - `filterFromLeafRows: true`: Filter includes sub-rows even if parent is filtered out.
+    - `maxLeafRowFilterDepth: number`: Limit filtering depth in nested rows.
+
+### Global Filtering
+
+- Filter rows based on a single value applied across multiple columns.
+- **Client-Side vs Server-Side:** Same considerations as column filtering. Server-side needs `manualFiltering: true`.
+- **Client-Side Setup:** Requires `getFilteredRowModel: getFilteredRowModel()`.
+- **State (`globalFilter`):** `any`. Manage via `state`/`onGlobalFilterChange` or use `initialState`.
+- **Filter Function (`globalFilterFn`):** String (built-in or custom key from `filterFns`) or function. Often uses `fuzzy` filter (see Fuzzy Filtering).
+- **UI:** Create a single input, bind its value to `globalFilter` state using `table.setGlobalFilter()`.
+- **Disabling:** `enableGlobalFilter: false` (table/column). Check with `column.getCanGlobalFilter()`. `options.getColumnCanGlobalFilter` provides fine-grained control per column.
+
+### Fuzzy Filtering
+
+- Filter based on approximate matches, often used with global filtering.
+- **Requires:** `@tanstack/match-sorter-utils`.
+- **Custom Filter Function (`fuzzyFilter`):**
+  ```ts
+  import { rankItem } from '@tanstack/match-sorter-utils';
+  import { FilterFn } from '@tanstack/react-table'; // or core
+
+  const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
+    const itemRank = rankItem(row.getValue(columnId), value);
+    addMeta({ itemRank }); // Store ranking info
+    return itemRank.passed;
+  };
+  ```
+- **Setup:**
+  ```ts
+  const table = useReactTable({
+    // ...
+    filterFns: {
+      fuzzy: fuzzyFilter,
+    },
+    globalFilterFn: 'fuzzy', // Use for global filter
+    // ...
+  });
+  ```
+- **Column Filtering:** Set `filterFn: 'fuzzy'` in column def.
+- **Sorting by Rank:** Define a `fuzzySort` function using `compareItems` from match-sorter and `sortingFns.alphanumeric` as fallback. Set `sortingFn: 'fuzzySort'` in column def. Requires `getSortedRowModel`.
+
+### Column Faceting
+
+- Generate lists of unique values or min/max ranges for a column based on the *current* filtering state (excluding the column's own filter). Useful for building filter UI like selects or range sliders.
+- **Setup:** Requires `getFacetedRowModel`, and optionally `getFacetedUniqueValues` and/or `getFacetedMinMaxValues`.
+  ```ts
+  import { getFacetedRowModel, getFacetedUniqueValues, getFacetedMinMaxValues } from '@tanstack/react-table';
+  const table = useReactTable({
+    // ...
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+    getFacetedMinMaxValues: getFacetedMinMaxValues(),
+    // ...
+  });
+  ```
+- **APIs:**
+    - `column.getFacetedRowModel()`: Returns the row model used for faceting this column.
+    - `column.getFacetedUniqueValues()`: Returns `Map<any, number>` of unique values and their counts.
+    - `column.getFacetedMinMaxValues()`: Returns `[min: number, max: number]` tuple or `undefined`.
+- **Server-Side:** Implement fetching logic and provide results via `options.getFacetedUniqueValues` / `options.getFacetedMinMaxValues` overrides, or handle completely outside the table instance.
+
+### Global Faceting
+
+- Similar to column faceting but operates on the entire table's data based on the global filter state.
+- **Setup:** Requires the same faceted row models as column faceting.
+- **APIs:**
+    - `table.getGlobalFacetedRowModel()`
+    - `table.getGlobalFacetedUniqueValues()`
+    - `table.getGlobalFacetedMinMaxValues()`
+
+### Grouping
+
+- Group rows based on column values. Often used with aggregation.
+- **Setup:** Requires `getGroupedRowModel`. Optionally `getExpandedRowModel` for expand/collapse UI.
+- **State (`grouping`):** Array of column IDs to group by (e.g., `['status', 'age']`). Manage via `state`/`onGroupingChange` or use `initialState`.
+- **Column Defs:**
+    - `enableGrouping: boolean`: Allow/disallow grouping by this column.
+    - `getGroupingValue: (row) => any`: Provide a custom value for grouping (defaults to accessor value).
+    - `aggregationFn`: String (built-in or custom key) or function. Built-ins: `sum`, `min`, `max`, `extent`, `mean`, `median`, `unique`, `uniqueCount`, `count`.
+    - `aggregatedCell`: Custom cell renderer for aggregated cells.
+- **UI:**
+    - Use `header.column.getToggleGroupingHandler()` for grouping toggle buttons.
+    - Check `cell.getIsGrouped()`, `cell.getIsAggregated()`, `cell.getIsPlaceholder()`.
+    - Use `row.getToggleExpandedHandler()` for expand/collapse buttons on grouped rows.
+    - Render `aggregatedCell` or `cell` based on cell type.
+- **Options:**
+    - `groupedColumnMode`: `'reorder'` (default, moves grouped columns to start), `'remove'` (hides grouped columns), `false` (leaves columns in place).
+    - `manualGrouping: true`: For server-side grouping.
+
+### Expanding
+
+- Show/hide additional data related to a row.
+- **Use Cases:**
+    1.  **Sub-rows:** Hierarchical data within the same table structure.
+    2.  **Custom UI:** Detail panels, sub-components, etc.
+- **Setup:** Requires `getExpandedRowModel`.
+- **Sub-rows:** Define `options.getSubRows: (row) => row.children` (or similar) to tell the table where to find sub-data.
+- **Custom UI (Detail Panels):**
+    - Override `options.getRowCanExpand: (row) => boolean` (e.g., `() => true` if all rows can have details).
+    - Render conditionally based on `row.getIsExpanded()`. Often involves rendering an extra `<tr>` with a `<td>` spanning all columns (`colSpan={row.getVisibleCells().length}`).
+- **State (`expanded`):** `true` (all expanded) or `Record<string, boolean>` (map of row IDs to expanded status). Manage via `state`/`onExpandedChange` or use `initialState`.
+- **UI:** Use `row.getToggleExpandedHandler()` for expand/collapse buttons. Check `row.getCanExpand()`.
+- **Options:**
+    - `paginateExpandedRows: false`: Prevent expanded rows from spanning multiple pages.
+    - `filterFromLeafRows: true`: Include sub-rows in filtering.
+    - `maxLeafRowFilterDepth: number`: Limit filtering depth.
+    - `manualExpanding: true`: For server-side expanding.
+
+### Pagination
+
+- Display data in pages.
+- **Client-Side vs Server-Side:** Client-side handles pagination logic if all data is loaded. Server-side requires `manualPagination: true` and passing already paginated data.
+- **Client-Side Setup:** Requires `getPaginationRowModel: getPaginationRowModel()`.
+- **Server-Side Setup:**
+    - `manualPagination: true`.
+    - Provide `rowCount` (total rows in DB) or `pageCount` (total pages in DB). If `rowCount` is provided, `pageCount` is calculated. Set `pageCount: -1` if unknown.
+- **State (`pagination`):** `{ pageIndex: number, pageSize: number }`. Manage via `state`/`onPaginationChange` or use `initialState`.
+- **Options:**
+    - `autoResetPageIndex: boolean`: Reset to page 0 on data/filter/sort changes (default `true`, `false` if `manualPagination: true`).
+- **APIs:**
+    - Navigation: `nextPage()`, `previousPage()`, `firstPage()`, `lastPage()`, `setPageIndex(index)`, `setPageSize(size)`.
+    - State Checks: `getCanNextPage()`, `getCanPreviousPage()`.
+    - Info: `getPageCount()`, `getRowCount()`.
+
+### Row Pinning
+
+- Freeze rows to the top or bottom of the table.
+- **Order of Operations:** 1. Row Pinning -> 2. Sorting.
+- **State (`rowPinning`):** `{ top?: string[], bottom?: string[] }`. Manage via `state`/`onRowPinningChange` or use `initialState`.
+- **Setup:** Requires `getCoreRowModel` (pinning logic is built-in).
+- **Options:**
+    - `enableRowPinning: boolean | (row => boolean)`: Enable/disable pinning.
+    - `keepPinnedRows: boolean`: `true` (default) keeps pinned rows visible even if filtered/paginated out. `false` respects filtering/pagination.
+- **APIs:**
+    - `row.pin('top' | 'bottom' | false)`
+    - `row.getIsPinned()`
+    - `row.getCanPin()`
+    - `row.getPinnedIndex()`
+    - `table.getTopRows()`, `table.getCenterRows()`, `table.getBottomRows()`
+- **Rendering:** Render top, center, and bottom rows separately. Apply sticky positioning using `row.getPinnedIndex()` to calculate `top` or `bottom` CSS values.
+
+### Row Selection
+
+- Allow users to select rows (e.g., via checkboxes).
+- **State (`rowSelection`):** `Record<string, boolean>` (map of row IDs to selected status). Manage via `state`/`onRowSelectionChange` or use `initialState`.
+- **Row IDs:** Use `options.getRowId` to provide meaningful IDs (e.g., `row => row.uuid`) instead of default index-based IDs.
+- **Options:**
+    - `enableRowSelection: boolean | (row => boolean)`: Enable/disable selection.
+    - `enableMultiRowSelection: boolean | (row => boolean)`: `false` for single selection (radio button style).
+    - `enableSubRowSelection: boolean | (row => boolean)`: `false` to disable automatic selection of sub-rows when parent is selected.
+- **APIs:**
+    - Row: `row.toggleSelected()`, `row.getIsSelected()`, `row.getCanSelect()`, `row.getIsSomeSelected()` (for indeterminate state), `row.getToggleSelectedHandler()`.
+    - Table: `table.toggleAllRowsSelected()`, `table.toggleAllPageRowsSelected()`, `table.getIsAllRowsSelected()`, `table.getIsSomeRowsSelected()`, `table.getToggleAllRowsSelectedHandler()`, `table.getToggleAllPageRowsSelectedHandler()`.
+- **UI:** Use APIs to bind checkbox `checked`, `indeterminate`, `disabled`, and `onChange` props.
+
+### Sorting
+
+- Order rows based on column values.
+- **Client-Side vs Server-Side:** Be consistent with pagination/filtering. Server-side needs `manualSorting: true`.
+- **Client-Side Setup:** Requires `getSortedRowModel: getSortedRowModel()`.
+- **State (`sorting`):** `[{ id: string, desc: boolean }]`. Array allows multi-sort. Manage via `state`/`onSortingChange` or use `initialState`.
+- **Sorting Functions (`sortingFn`):**
+    - Built-in: `alphanumeric`, `text`, `datetime`, `basic` (case-sensitive variants available).
+    - Custom: Define in `sortingFns` table option or directly in column def. Signature: `(rowA, rowB, columnId) => -1 | 0 | 1`.
+- **Options:**
+    - `enableSorting: boolean` (table/column).
+    - `sortDescFirst: boolean` (table/column): Default sort direction.
+    - `invertSorting: boolean` (column): For rankings/scores where lower is better.
+    - `sortUndefined: 'first' | 'last' | false | -1 | 1`: Control placement of undefined values.
+    - `enableSortingRemoval: boolean`: `false` prevents cycling back to 'unsorted' state.
+    - `enableMultiSort: boolean` (table/column).
+    - `isMultiSortEvent: (e) => boolean`: Customize multi-sort trigger (default: Shift key).
+    - `maxMultiSortColCount: number`: Limit simultaneous sorts.
+- **APIs:**
+    - `column.toggleSorting(desc?, multi?)`, `column.getToggleSortingHandler()`.
+    - `column.getIsSorted()`, `column.getCanSort()`, `column.getNextSortingOrder()`.
+    - `column.getSortIndex()` (for multi-sort).
+
+### Virtualization
+
+- Render only visible rows/columns for performance with large datasets.
+- **Not built-in.** Use external libraries like `@tanstack/react-virtual`.
+- **Strategy:**
+    - Wrap table in a scrollable container (`div`) with fixed height and `overflow: auto`.
+    - Use `useVirtualizer` hook from `@tanstack/react-virtual`.
+    - **Row Virtualization:**
+        - Provide `count` (total rows), `getScrollElement`, `estimateSize`.
+        - Use `rowVirtualizer.getVirtualItems()` to get visible row indices.
+        - Render only rows corresponding to virtual items.
+        - Apply `position: absolute` and `transform: translateY(...)` style to `<tr>` elements based on `virtualRow.start`.
+        - Set `<tbody>` height to `rowVirtualizer.getTotalSize()` for correct scrollbar.
+        - Use `measureElement` for dynamic row heights.
+    - **Column Virtualization:**
+        - Similar setup but `horizontal: true`.
+        - Can use padding strategy: Render empty `<th>`/`<td>` at start/end with width equal to virtual padding, and only render virtual columns in between.
+        - Or use absolute positioning similar to rows.
+- **Infinite Scrolling:** Combine row virtualization with `useInfiniteQuery` (React Query) or similar. Fetch next page when scroll approaches bottom. Use `fetchMoreOnBottomReached` logic.
+
+### Custom Features
+
+- Extend TanStack Table with custom logic, state, and APIs.
+- **Method 1: Composition:** Wrap `useReactTable` (or equivalent) in a custom hook/component. Add state/logic alongside the table instance. (e.g., Material React Table).
+- **Method 2: `_features` Option (v8.14.0+):** Tightly integrate custom features.
+    - **Define `TableFeature` Object:** Implement methods like `getInitialState`, `getDefaultOptions`, `createTable`, `createColumn`, `createRow`, etc., to add state, options, and APIs.
+    - **TypeScript:** Use declaration merging to add custom types to `@tanstack/react-table` interfaces (`TableState`, `TableOptionsResolved`, `Table`, `Row`, `Column`, etc.).
+    - **Instantiate:** Pass the feature object in the `_features` array: `useReactTable({ _features: [MyCustomFeature], ... })`.
+    - **Example:** See `DensityFeature` in `custom-features` example for adding table density controls.
+
+## Core APIs
+
+### ColumnDef API (`options.columns[]`)
+
+- `id: string`: Unique ID (often optional, derived from `accessorKey` or `header`).
+- `accessorKey: string`: Key for accessing data in row objects (e.g., `'firstName'`, `'address.city'`).
+- `accessorFn: (originalRow, index) => value`: Function to derive value from row data.
+- `header: string | (props) => ReactNode`: Header content/renderer.
+- `cell: (props) => ReactNode`: Cell content/renderer. `props` include `getValue`, `row`, `column`, `cell`, `table`.
+- `footer: string | (props) => ReactNode`: Footer content/renderer.
+- `columns: ColumnDef[]`: For grouping columns.
+- `meta: object`: Custom metadata accessible via `column.columnDef.meta`. Extend `ColumnMeta` interface via declaration merging.
+- *Feature-specific options*: `enableSorting`, `sortingFn`, `filterFn`, `enableHiding`, `enableResizing`, `size`, `minSize`, `maxSize`, `enablePinning`, `aggregationFn`, `aggregatedCell`, `enableGrouping`, etc.
+
+### Table API (`table`)
+
+- **State Management:**
+    - `getState: () => TableState`: Get current merged state.
+    - `setState: (updater) => void`: Update table state.
+    - `initialState: TableState`: Resolved initial state.
+    - `reset: () => void`: Reset state to initial.
+    - `options: TableOptions`: Read-only current options.
+    - `setOptions: (updater) => void`: Update table options (mainly for adapters).
+- **Row Models:**
+    - `getCoreRowModel: () => RowModel`
+    - `getRowModel: () => RowModel` (final processed model)
+    - `getPreFilteredRowModel`, `getFilteredRowModel`, `getPreSortedRowModel`, `getSortedRowModel`, etc.
+- **Columns:**
+    - `getAllColumns: () => Column[]`
+    - `getAllFlatColumns: () => Column[]`
+    - `getAllLeafColumns: () => Column[]`
+    - `getColumn: (id) => Column | undefined`
+    - `getVisibleFlatColumns`, `getVisibleLeafColumns`, `getLeft/Center/RightVisibleLeafColumns`.
+- **Headers/Footers:**
+    - `getHeaderGroups: () => HeaderGroup[]`
+    - `getFooterGroups: () => HeaderGroup[]`
+    - `getLeft/Center/RightHeaderGroups`, `getLeft/Center/RightFooterGroups`.
+    - `getFlatHeaders`, `getLeafHeaders`, `getLeft/Center/RightFlatHeaders`, `getLeft/Center/RightLeafHeaders`.
+- *Feature-specific APIs*: `setSorting`, `resetSorting`, `setColumnFilters`, `resetColumnFilters`, `setPagination`, `resetPagination`, `setRowSelection`, `resetRowSelection`, `setColumnOrder`, `resetColumnOrder`, `setColumnVisibility`, `resetColumnVisibility`, `setColumnPinning`, `resetColumnPinning`, `setGrouping`, `resetGrouping`, `setExpanded`, `resetExpanded`, `setGlobalFilter`, `resetGlobalFilter`, `setColumnSizing`, `resetColumnSizing`, etc.
+
+### Column API (`column`)
+
+- `id: string`: Unique ID.
+- `depth: number`: Depth if grouped.
+- `accessorFn: AccessorFn | undefined`: Resolved accessor function.
+- `columnDef: ColumnDef`: Original definition.
+- `parent: Column | undefined`: Parent column if grouped.
+- `columns: Column[]`: Child columns if grouped.
+- `getFlatColumns: () => Column[]`: Flattened child columns.
+- `getLeafColumns: () => Column[]`: Leaf child columns.
+- *Feature-specific APIs*: `getCanSort`, `getIsSorted`, `toggleSorting`, `getCanFilter`, `getIsFiltered`, `setFilterValue`, `getCanGroup`, `getIsGrouped`, `toggleGrouping`, `getCanHide`, `getIsVisible`, `toggleVisibility`, `getCanPin`, `getIsPinned`, `pin`, `getCanResize`, `getIsResizing`, `getSize`, `resetSize`, `getIndex`, `getIsFirstColumn`, `getIsLastColumn`, `getFacetedUniqueValues`, `getFacetedMinMaxValues`, etc.
+
+### HeaderGroup API (`headerGroup`)
+
+- `id: string`: Unique ID.
+- `depth: number`: Depth (row index) of the header group.
+- `headers: Header[]`: Array of headers in this group.
+
+### Header API (`header`)
+
+- `id: string`: Unique ID.
+- `index: number`: Index within the header group.
+- `depth: number`: Depth (row index) of the header group.
+- `colSpan: number`: Columns spanned.
+- `rowSpan: number`: Rows spanned.
+- `column: Column`: Associated column.
+- `headerGroup: HeaderGroup`: Associated header group.
+- `subHeaders: Header[]`: Child headers.
+- `isPlaceholder: boolean`: If it's a placeholder.
+- `placeholderId: string | undefined`: ID if placeholder.
+- `getContext: () => object`: Context for `flexRender`.
+- `getLeafHeaders: () => Header[]`: Leaf headers under this one.
+- *Feature-specific APIs*: `getSize`, `getStart`, `getResizeHandler`.
+
+### Row API (`row`)
+
+- `id: string`: Unique ID (from `options.getRowId` or index).
+- `index: number`: Index within its parent array.
+- `depth: number`: Nesting depth.
+- `original: TData`: Original data object.
+- `subRows: Row[]`: Child rows.
+- `parentId: string | undefined`: Parent row ID.
+- `getParentRow: () => Row | undefined`.
+- `getParentRows: () => Row[]`.
+- `getVisibleCells: () => Cell[]`.
+- `getAllCells: () => Cell[]`.
+- `getValue: (columnId) => value`.
+- `renderValue: (columnId) => value | fallback`.
+- *Feature-specific APIs*: `getIsSelected`, `toggleSelected`, `getCanSelect`, `getIsExpanded`, `toggleExpanded`, `getCanExpand`, `getIsGrouped`, `getIsPinned`, `pin`, `getPinnedIndex`, etc.
+
+### Cell API (`cell`)
+
+- `id: string`: Unique ID (`${row.id}_${column.id}`).
+- `row: Row`: Associated row.
+- `column: Column`: Associated column.
+- `getValue: () => value`: Get cell value.
+- `renderValue: () => value | fallback`: Get cell value or fallback.
+- `getContext: () => object`: Context for `flexRender`.
+- *Feature-specific APIs*: `getIsGrouped`, `getIsAggregated`, `getIsPlaceholder`.
+
+## Feature APIs (Summary - See specific API docs for full details)
+
+### Column Filtering API
+
+- **State:** `columnFilters: { id: string, value: unknown }[]`
+- **Options:** `manualFiltering`, `onColumnFiltersChange`, `filterFns`, `enableColumnFilters`, `column.enableColumnFilter`, `column.filterFn`.
+- **Table API:** `setColumnFilters`, `resetColumnFilters`, `getPreFilteredRowModel`, `getFilteredRowModel`.
+- **Column API:** `getCanFilter`, `getIsFiltered`, `getFilterValue`, `setFilterValue`, `getFilterIndex`, `getFilterFn`.
+
+### Column Faceting API
+
+- **Options:** `getFacetedRowModel`, `getFacetedUniqueValues`, `getFacetedMinMaxValues`.
+- **Column API:** `getFacetedRowModel`, `getFacetedUniqueValues`, `getFacetedMinMaxValues`.
+- **Table API:** `getColumnFacetedRowModel`.
+
+### Column Ordering API
+
+- **State:** `columnOrder: string[]`
+- **Options:** `onColumnOrderChange`.
+- **Table API:** `setColumnOrder`, `resetColumnOrder`.
+- **Column API:** `getIndex`, `getIsFirstColumn`, `getIsLastColumn`.
+
+### Column Pinning API
+
+- **State:** `columnPinning: { left?: string[], right?: string[] }`
+- **Options:** `enableColumnPinning`, `onColumnPinningChange`, `column.enablePinning`.
+- **Table API:** `setColumnPinning`, `resetColumnPinning`, `getIsSomeColumnsPinned`, `getLeft/Center/RightHeaderGroups`, `getLeft/Center/RightFooterGroups`, `getLeft/Center/RightFlatHeaders`, `getLeft/Center/RightLeafHeaders`, `getLeft/Center/RightLeafColumns`.
+- **Column API:** `getCanPin`, `getIsPinned`, `pin`, `getPinnedIndex`.
+- **Row API:** `getLeft/Center/RightVisibleCells`.
+
+### Column Sizing API
+
+- **State:** `columnSizing: Record<string, number>`, `columnSizingInfo: ColumnSizingInfoState`
+- **Options:** `enableColumnResizing`, `columnResizeMode`, `columnResizeDirection`, `onColumnSizingChange`, `onColumnSizingInfoChange`, `column.enableResizing`, `column.size`, `column.minSize`, `column.maxSize`.
+- **Table API:** `setColumnSizing`, `resetColumnSizing`, `setColumnSizingInfo`, `resetHeaderSizeInfo`, `getTotalSize`, `getLeft/Center/RightTotalSize`.
+- **Column API:** `getSize`, `getStart`, `getAfter`, `getCanResize`, `getIsResizing`, `resetSize`.
+- **Header API:** `getSize`, `getStart`, `getResizeHandler`.
+
+### Column Visibility API
+
+- **State:** `columnVisibility: Record<string, boolean>`
+- **Options:** `onColumnVisibilityChange`, `enableHiding`, `column.enableHiding`.
+- **Table API:** `setColumnVisibility`, `resetColumnVisibility`, `toggleAllColumnsVisible`, `getIsAllColumnsVisible`, `getIsSomeColumnsVisible`, `getToggleAllColumnsVisibilityHandler`, `getVisibleFlatColumns`, `getVisibleLeafColumns`, `getLeft/Center/RightVisibleLeafColumns`.
+- **Column API:** `getCanHide`, `getIsVisible`, `toggleVisibility`, `getToggleVisibilityHandler`.
+- **Row API:** `getVisibleCells`.
+
+### Global Faceting API
+
+- **Table API:** `getGlobalFacetedRowModel`, `getGlobalFacetedUniqueValues`, `getGlobalFacetedMinMaxValues`.
+
+### Global Filtering API
+
+- **State:** `globalFilter: any`
+- **Options:** `manualFiltering`, `onGlobalFilterChange`, `globalFilterFn`, `enableGlobalFilter`, `getColumnCanGlobalFilter`, `column.enableGlobalFilter`.
+- **Table API:** `setGlobalFilter`, `resetGlobalFilter`, `getGlobalAutoFilterFn`, `getGlobalFilterFn`.
+- **Column API:** `getCanGlobalFilter`.
+
+### Sorting API
+
+- **State:** `sorting: { id: string, desc: boolean }[]`
+- **Options:** `manualSorting`, `onSortingChange`, `sortingFns`, `enableSorting`, `enableSortingRemoval`, `enableMultiSort`, `enableMultiRemove`, `sortDescFirst`, `maxMultiSortColCount`, `isMultiSortEvent`, `getSortedRowModel`, `column.sortingFn`, `column.sortDescFirst`, `column.enableSorting`, `column.enableMultiSort`, `column.invertSorting`, `column.sortUndefined`.
+- **Table API:** `setSorting`, `resetSorting`, `getPreSortedRowModel`, `getSortedRowModel`.
+- **Column API:** `getCanSort`, `getIsSorted`, `toggleSorting`, `getToggleSortingHandler`, `clearSorting`, `getSortIndex`, `getCanMultiSort`, `getNextSortingOrder`, `getFirstSortDir`, `getSortingFn`.
+
+### Grouping API
+
+- **State:** `grouping: string[]`
+- **Options:** `manualGrouping`, `onGroupingChange`, `aggregationFns`, `enableGrouping`, `getGroupedRowModel`, `groupedColumnMode`, `column.aggregationFn`, `column.aggregatedCell`, `column.enableGrouping`, `column.getGroupingValue`.
+- **Table API:** `setGrouping`, `resetGrouping`, `getPreGroupedRowModel`, `getGroupedRowModel`.
+- **Column API:** `getCanGroup`, `getIsGrouped`, `getGroupedIndex`, `toggleGrouping`, `getToggleGroupingHandler`, `getAggregationFn`.
+- **Row API:** `getIsGrouped`, `groupingColumnId`, `groupingValue`, `getGroupingValue`.
+- **Cell API:** `getIsAggregated`, `getIsGrouped`, `getIsPlaceholder`.
+
+### Expanding API
+
+- **State:** `expanded: true | Record<string, boolean>`
+- **Options:** `manualExpanding`, `onExpandedChange`, `autoResetExpanded`, `enableExpanding`, `getExpandedRowModel`, `getIsRowExpanded`, `getRowCanExpand`, `paginateExpandedRows`.
+- **Table API:** `setExpanded`, `resetExpanded`, `toggleAllRowsExpanded`, `getToggleAllRowsExpandedHandler`, `getIsAllRowsExpanded`, `getIsSomeRowsExpanded`, `getCanSomeRowsExpand`, `getExpandedDepth`, `getExpandedRowModel`, `getPreExpandedRowModel`.
+- **Row API:** `toggleExpanded`, `getIsExpanded`, `getCanExpand`, `getToggleExpandedHandler`, `getIsAllParentsExpanded`.
+
+### Pagination API
+
+- **State:** `pagination: { pageIndex: number, pageSize: number }`
+- **Options:** `manualPagination`, `pageCount`, `rowCount`, `autoResetPageIndex`, `onPaginationChange`, `getPaginationRowModel`.
+- **Table API:** `setPagination`, `resetPagination`, `setPageIndex`, `resetPageIndex`, `setPageSize`, `resetPageSize`, `getPageOptions`, `getCanPreviousPage`, `getCanNextPage`, `previousPage`, `nextPage`, `firstPage`, `lastPage`, `getPageCount`, `getPrePaginationRowModel`, `getPaginationRowModel`.
+
+### Row Pinning API
+
+- **State:** `rowPinning: { top?: string[], bottom?: string[] }`
+- **Options:** `enableRowPinning`, `keepPinnedRows`, `onRowPinningChange`.
+- **Table API:** `setRowPinning`, `resetRowPinning`, `getIsSomeRowsPinned`, `getTopRows`, `getCenterRows`, `getBottomRows`.
+- **Row API:** `pin`, `getCanPin`, `getIsPinned`, `getPinnedIndex`.
+
+### Row Selection API
+
+- **State:** `rowSelection: Record<string, boolean>`
+- **Options:** `enableRowSelection`, `enableMultiRowSelection`, `enableSubRowSelection`, `onRowSelectionChange`.
+- **Table API:** `setRowSelection`, `resetRowSelection`, `getIsAllRowsSelected`, `getIsAllPageRowsSelected`, `getIsSomeRowsSelected`, `getIsSomePageRowsSelected`, `toggleAllRowsSelected`, `toggleAllPageRowsSelected`, `getToggleAllRowsSelectedHandler`, `getToggleAllPageRowsSelectedHandler`, `getSelectedRowModel`, `getFilteredSelectedRowModel`, `getGroupedSelectedRowModel`.
+- **Row API:** `toggleSelected`, `getToggleSelectedHandler`, `getIsSelected`, `getIsSomeSelected`, `getIsAllSubRowsSelected`, `getCanSelect`, `getCanMultiSelect`, `getCanSelectSubRows`.
+
+## Examples (React Snippets)
+
+### Basic Table Structure
+
+```jsx
+import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
+
+function BasicTable({ data, columns }) {
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <table>
+      <thead>
+        {table.getHeaderGroups().map(headerGroup => (
+          <tr key={headerGroup.id}>
+            {headerGroup.headers.map(header => (
+              <th key={header.id} colSpan={header.colSpan}>
+                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+              </th>
+            ))}
+          </tr>
+        ))}
+      </thead>
+      <tbody>
+        {table.getRowModel().rows.map(row => (
+          <tr key={row.id}>
+            {row.getVisibleCells().map(cell => (
+              <td key={cell.id}>
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+      {/* Optional Footer */}
+      <tfoot>
+        {table.getFooterGroups().map(footerGroup => (
+          <tr key={footerGroup.id}>
+            {footerGroup.headers.map(header => (
+              <th key={header.id} colSpan={header.colSpan}>
+                {header.isPlaceholder ? null : flexRender(header.column.columnDef.footer, header.getContext())}
+              </th>
+            ))}
+          </tr>
+        ))}
+      </tfoot>
+    </table>
+  );
+}
+```
+
+### Pagination Controls
+
+```jsx
+function PaginationControls({ table }) {
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={() => table.firstPage()} disabled={!table.getCanPreviousPage()}>{'<<'}</button>
+      <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>{'<'}</button>
+      <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>{'>'}</button>
+      <button onClick={() => table.lastPage()} disabled={!table.getCanNextPage()}>{'>>'}</button>
+      <span>Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</span>
+      <input
+        type="number"
+        defaultValue={table.getState().pagination.pageIndex + 1}
+        onChange={e => table.setPageIndex(Number(e.target.value) - 1)}
+        // ... min/max attributes
+      />
+      <select
+        value={table.getState().pagination.pageSize}
+        onChange={e => table.setPageSize(Number(e.target.value))}
+      >
+        {[10, 20, 50].map(size => <option key={size} value={size}>Show {size}</option>)}
+      </select>
+    </div>
+  );
+}
+```
+
+### Sorting Indicator/Handler
+
+```jsx
+// In header cell render
+<th key={header.id} colSpan={header.colSpan}>
+  <div onClick={header.column.getToggleSortingHandler()} className={header.column.getCanSort() ? 'cursor-pointer select-none' : ''}>
+    {flexRender(header.column.columnDef.header, header.getContext())}
+    {{ asc: ' 🔼', desc: ' 🔽' }[header.column.getIsSorted() as string] ?? null}
+  </div>
+</th>
+```
+
+### Column Filter Input (Basic Text)
+
+```jsx
+function Filter({ column }) {
+  const columnFilterValue = column.getFilterValue();
+  return (
+    <input
+      type="text"
+      value={(columnFilterValue ?? '') as string}
+      onChange={e => column.setFilterValue(e.target.value)}
+      placeholder={`Search...`}
+      onClick={e => e.stopPropagation()} // Prevent sorting click-through
+    />
+  );
+}
+
+// In header cell render
+{header.column.getCanFilter() ? <Filter column={header.column} /> : null}
+```
+
+### Row Selection Checkbox
+
+```jsx
+// IndeterminateCheckbox component (see examples for implementation)
+
+// In column defs
+{
+  id: 'select',
+  header: ({ table }) => (
+    <IndeterminateCheckbox
+      checked={table.getIsAllRowsSelected()}
+      indeterminate={table.getIsSomeRowsSelected()}
+      onChange={table.getToggleAllRowsSelectedHandler()}
+    />
+  ),
+  cell: ({ row }) => (
+    <IndeterminateCheckbox
+      checked={row.getIsSelected()}
+      disabled={!row.getCanSelect()}
+      indeterminate={row.getIsSomeSelected()}
+      onChange={row.getToggleSelectedHandler()}
+    />
+  ),
+}
+```
+
+### Column Visibility Toggle
+
+```jsx
+<div>
+  <label>
+    <input
+      type="checkbox"
+      checked={table.getIsAllColumnsVisible()}
+      onChange={table.getToggleAllColumnsVisibilityHandler()}
+    /> Toggle All
+  </label>
+  {table.getAllLeafColumns().map(column => (
+    <div key={column.id}>
+      <label>
+        <input
+          type="checkbox"
+          checked={column.getIsVisible()}
+          onChange={column.getToggleVisibilityHandler()}
+          disabled={!column.getCanHide()}
+        /> {column.id}
+      </label>
+    </div>
+  ))}
+</div>
+```
+
+### Column Resizing Handle
+
+```jsx
+// In header cell render
+<th key={header.id} colSpan={header.colSpan} style={{ width: header.getSize() }}>
+  {/* ... header content ... */}
+  {header.column.getCanResize() && (
+    <div
+      onMouseDown={header.getResizeHandler()}
+      onTouchStart={header.getResizeHandler()}
+      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+      // Optional: style for visual feedback during resize if mode is 'onEnd'
+      style={{
+        transform: table.options.columnResizeMode === 'onEnd' && header.column.getIsResizing()
+          ? `translateX(${table.getState().columnSizingInfo.deltaOffset ?? 0}px)`
+          : ''
+      }}
+    />
+  )}
+</th>
+```
+
+### Expanding/Sub-component Row
+
+```jsx
+// In table body render
+<tbody>
+  {table.getRowModel().rows.map(row => (
+    <React.Fragment key={row.id}>
+      <tr> {/* Main row */}
+        {/* Expander button in a cell */}
+        <td>
+          {row.getCanExpand() ? (
+            <button onClick={row.getToggleExpandedHandler()}>
+              {row.getIsExpanded() ? '👇' : '👉'}
+            </button>
+          ) : null}
+          {/* Other cell content */}
+        </td>
+        {/* Render other cells */}
+        {row.getVisibleCells().map(cell => (
+          <td key={cell.id}>{/*...*/}</td>
+        ))}
+      </tr>
+      {/* Conditional rendering for expanded content */}
+      {row.getIsExpanded() && (
+        <tr>
+          <td colSpan={row.getVisibleCells().length}>
+            {/* Render your sub-component or expanded data here */}
+            <SubComponent row={row} />
+          </td>
+        </tr>
+      )}
+    </React.Fragment>
+  ))}
+</tbody>
+```
+
+### Grouping Display
+
+```jsx
+// In cell render
+<td key={cell.id} style={{ background: cell.getIsGrouped() ? '#...' : cell.getIsAggregated() ? '#...' : cell.getIsPlaceholder() ? '#...' : 'white' }}>
+  {cell.getIsGrouped() ? (
+    <>
+      <button onClick={row.getToggleExpandedHandler()} disabled={!row.getCanExpand()}>
+        {row.getIsExpanded() ? '👇' : '👉'}
+      </button>{' '}
+      {flexRender(cell.column.columnDef.cell, cell.getContext())} ({row.subRows.length})
+    </>
+  ) : cell.getIsAggregated() ? (
+    flexRender(cell.column.columnDef.aggregatedCell ?? cell.column.columnDef.cell, cell.getContext())
+  ) : cell.getIsPlaceholder() ? null : (
+    flexRender(cell.column.columnDef.cell, cell.getContext())
+  )}
+</td>
+```
+
+### Column Pinning (Sticky CSS)
+
+```jsx
+// getCommonPinningStyles function (see column-pinning-sticky example)
+const getCommonPinningStyles = (column) => {
+  const isPinned = column.getIsPinned();
+  const isLastLeft = isPinned === 'left' && column.getIsLastColumn('left');
+  const isFirstRight = isPinned === 'right' && column.getIsFirstColumn('right');
+  return {
+    boxShadow: isLastLeft ? '...' : isFirstRight ? '...' : undefined,
+    left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
+    right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
+    position: isPinned ? 'sticky' : 'relative',
+    width: column.getSize(),
+    zIndex: isPinned ? 1 : 0,
+    // ... other styles like background
+  };
+};
+
+// Apply styles to th and td
+<th style={{ ...getCommonPinningStyles(header.column) }}>...</th>
+<td style={{ ...getCommonPinningStyles(cell.column) }}>...</td>
+
+// Ensure table container has overflow and table has border-collapse: separate
+// <div style={{ overflowX: 'auto' }}>
+//   <table style={{ borderCollapse: 'separate' }}>...</table>
+// </div>
+```
+
+### Row Drag and Drop (using @dnd-kit)
+
+```jsx
+import { DndContext, closestCenter, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { CSS } from '@dnd-kit/utilities';
+
+// DraggableRow Component
+function DraggableRow({ row }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.original.userId }); // Use unique ID
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.8 : 1,
+    zIndex: isDragging ? 1 : 0,
+    position: 'relative',
+  };
+  return (
+    <tr ref={setNodeRef} style={style}>
+      {/* Optional Drag Handle Cell */}
+      <td><button {...attributes} {...listeners}>🟰</button></td>
+      {/* Render other cells */}
+      {row.getVisibleCells().map(cell => <td key={cell.id}>{/*...*/}</td>)}
+    </tr>
+  );
+}
+
+// Main App Component
+function App() {
+  // ... setup table, data, setData, columns ...
+  const dataIds = useMemo(() => data.map(d => d.userId), [data]); // Get stable list of IDs
+
+  const sensors = useSensors(useSensor(MouseSensor), useSensor(TouchSensor), useSensor(KeyboardSensor));
+
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setData(currentData => {
+        const oldIndex = dataIds.indexOf(active.id);
+        const newIndex = dataIds.indexOf(over.id);
+        return arrayMove(currentData, oldIndex, newIndex);
+      });
+    }
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis]}>
+      <table>
+        {/* ... thead ... */}
+        <tbody>
+          <SortableContext items={dataIds} strategy={verticalListSortingStrategy}>
+            {table.getRowModel().rows.map(row => (
+              <DraggableRow key={row.id} row={row} />
+            ))}
+          </SortableContext>
+        </tbody>
+      </table>
+    </DndContext>
+  );
+}
+```
+
+### Column Drag and Drop (using @dnd-kit)
+
+```jsx
+import { DndContext, closestCenter, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
+import { CSS } from '@dnd-kit/utilities';
+
+// DraggableTableHeader Component
+function DraggableTableHeader({ header }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: header.column.id });
+  const style = {
+    transform: CSS.Translate.toString(transform), // Use Translate for non-squishing
+    transition,
+    opacity: isDragging ? 0.8 : 1,
+    position: 'relative',
+    width: header.column.getSize(),
+    zIndex: isDragging ? 1 : 0,
+  };
+  return (
+    <th ref={setNodeRef} style={style} colSpan={header.colSpan}>
+      {/* Render header content */}
+      <button {...attributes} {...listeners}>🟰</button> {/* Drag Handle */}
+    </th>
+  );
+}
+
+// DragAlongCell Component (Optional: makes cells follow header during drag)
+function DragAlongCell({ cell }) {
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: cell.column.id });
+   const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.8 : 1,
+    position: 'relative',
+    width: cell.column.getSize(),
+    zIndex: isDragging ? 1 : 0,
+  };
+  return (
+    <td ref={setNodeRef} style={style}>
+      {/* Render cell content */}
+    </td>
+  );
+}
+
+// Main App Component
+function App() {
+  // ... setup table, data, columns ...
+  const [columnOrder, setColumnOrder] = useState(() => columns.map(c => c.id)); // Manage column order state
+
+  const sensors = useSensors(useSensor(MouseSensor), useSensor(TouchSensor), useSensor(KeyboardSensor));
+
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setColumnOrder(currentOrder => {
+        const oldIndex = currentOrder.indexOf(active.id as string);
+        const newIndex = currentOrder.indexOf(over.id as string);
+        return arrayMove(currentOrder, oldIndex, newIndex);
+      });
+    }
+  }
+
+  // Update table state
+  const table = useReactTable({
+    // ... other options
+    state: { columnOrder },
+    onColumnOrderChange: setColumnOrder,
+  });
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToHorizontalAxis]}>
+      <table>
+        <thead>
+          {table.getHeaderGroups().map(headerGroup => (
+            <tr key={headerGroup.id}>
+              <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                {headerGroup.headers.map(header => (
+                  <DraggableTableHeader key={header.id} header={header} />
+                ))}
+              </SortableContext>
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.map(row => (
+            <tr key={row.id}>
+              {/* Use SortableContext + DragAlongCell if cells should visually move during drag */}
+              {row.getVisibleCells().map(cell => (
+                 <SortableContext key={cell.id} items={columnOrder} strategy={horizontalListSortingStrategy}>
+                    <DragAlongCell key={cell.id} cell={cell} />
+                 </SortableContext>
+                 // Or just render normal cells if only headers drag
+                 // <td key={cell.id} style={{ width: cell.column.getSize() }}>...</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </DndContext>
+  );
+}
+```
+
+### Editable Data
+
+```jsx
+// Default Column Def with Editable Cell
+const defaultColumn: Partial<ColumnDef<Person>> = {
+  cell: ({ getValue, row: { index }, column: { id }, table }) => {
+    const initialValue = getValue();
+    const [value, setValue] = React.useState(initialValue);
+
+    const onBlur = () => {
+      // Call meta function to update external data state
+      (table.options.meta as TableMeta).updateData(index, id, value);
+    };
+
+    React.useEffect(() => {
+      setValue(initialValue); // Sync with external changes
+    }, [initialValue]);
+
+    return <input value={value as string} onChange={e => setValue(e.target.value)} onBlur={onBlur} />;
+  },
+};
+
+// In useReactTable options
+const [data, setData] = React.useState(() => makeData(100));
+const [autoResetPageIndex, skipAutoResetPageIndex] = useSkipper(); // Hook to prevent page reset on edit
+
+const table = useReactTable({
+  data,
+  columns,
+  defaultColumn, // Apply editable cell to all columns unless overridden
+  autoResetPageIndex, // Control page reset
+  meta: { // Pass update function via meta
+    updateData: (rowIndex, columnId, value) => {
+      skipAutoResetPageIndex(); // Disable page reset for this update
+      setData(old =>
+        old.map((row, index) => {
+          if (index === rowIndex) {
+            return { ...old[rowIndex]!, [columnId]: value };
+          }
+          return row;
+        })
+      );
+    },
+  },
+  // ... other options
+});
+```
+
+### Virtualized Rows (using @tanstack/react-virtual)
+
+```jsx
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+function TableBody({ table, tableContainerRef }) {
+  const { rows } = table.getRowModel();
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 33, // Or your estimated row height
+    overscan: 5,
+    // measureElement for dynamic height (optional)
+  });
+
+  return (
+    <tbody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+      {rowVirtualizer.getVirtualItems().map(virtualRow => {
+        const row = rows[virtualRow.index];
+        return (
+          <tr
+            key={row.id}
+            ref={node => rowVirtualizer.measureElement?.(node)} // For dynamic height
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: `${virtualRow.size}px`, // Use measured size if dynamic
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
+          >
+            {row.getVisibleCells().map(cell => (
+              <td key={cell.id} style={{ width: cell.column.getSize() }}>
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </td>
+            ))}
+          </tr>
+        );
+      })}
+    </tbody>
+  );
+}
+
+// In main component:
+// const tableContainerRef = React.useRef(null);
+// <div ref={tableContainerRef} style={{ height: '500px', overflow: 'auto' }}>
+//   <table>
+//     {/* thead */}
+//     <TableBody table={table} tableContainerRef={tableContainerRef} />
+//   </table>
+// </div>
+```
+
+### Virtualized Columns (using @tanstack/react-virtual)
+
+```jsx
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+function TableContainer({ table }) {
+  const tableContainerRef = React.useRef(null);
+  const visibleColumns = table.getVisibleLeafColumns();
+
+  const columnVirtualizer = useVirtualizer({
+    count: visibleColumns.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: index => visibleColumns[index].getSize(),
+    horizontal: true,
+    overscan: 3,
+  });
+
+  const virtualColumns = columnVirtualizer.getVirtualItems();
+  const virtualPaddingLeft = virtualColumns[0]?.start ?? 0;
+  const virtualPaddingRight = columnVirtualizer.getTotalSize() - (virtualColumns[virtualColumns.length - 1]?.end ?? 0);
+
+  return (
+    <div ref={tableContainerRef} style={{ overflow: 'auto', height: '500px' }}>
+      <table style={{ width: columnVirtualizer.getTotalSize() }}>
+        <thead>
+          {table.getHeaderGroups().map(headerGroup => (
+            <tr key={headerGroup.id}>
+              {virtualPaddingLeft > 0 && <th style={{ width: virtualPaddingLeft }} />}
+              {virtualColumns.map(vc => {
+                const header = headerGroup.headers[vc.index];
+                return <th key={header.id} style={{ width: header.getSize() }}>{/*...*/}</th>;
+              })}
+              {virtualPaddingRight > 0 && <th style={{ width: virtualPaddingRight }} />}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.map(row => (
+            <tr key={row.id}>
+              {virtualPaddingLeft > 0 && <td style={{ width: virtualPaddingLeft }} />}
+              {virtualColumns.map(vc => {
+                const cell = row.getVisibleCells()[vc.index];
+                return <td key={cell.id} style={{ width: cell.column.getSize() }}>{/*...*/}</td>;
+              })}
+              {virtualPaddingRight > 0 && <td style={{ width: virtualPaddingRight }} />}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```
+
+### Server-Side Data Integration (React Query + React Router Example)
+
+```jsx
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useReactTable, getCoreRowModel } from '@tanstack/react-table';
+import { fetchUsers } from './api'; // Your API fetching function
+import Table from './components/Table'; // Your Table component
+import { cleanEmptyParams } from './utils/cleanEmptyParams'; // Helper to remove empty search params
+import { stateToSortBy, sortByToState } from './utils/tableSortMapper'; // Helpers for sorting state <-> search param
+
+// Define search param schema (using Zod or similar is recommended)
+type UserSearchFilters = {
+  pageIndex?: number;
+  pageSize?: number;
+  sortBy?: string; // e.g., 'firstName.asc'
+  // Add other filter fields like firstName?: string;
+};
+
+export const Route = createFileRoute('/users')({
+  validateSearch: (search: Record<string, unknown>): UserSearchFilters => {
+    // Validate and parse search params here
+    return {
+      pageIndex: Number(search.pageIndex ?? 0),
+      pageSize: Number(search.pageSize ?? 10),
+      sortBy: search.sortBy as string | undefined,
+      // Parse other filters
+    };
+  },
+  loaderDeps: ({ search }) => ({ search }),
+  loader: ({ deps }) => {
+    // Optional: Pre-fetch data on the server or before component mounts
+    // queryClient.prefetchQuery({ queryKey: ['users', deps.search], queryFn: () => fetchUsers(deps.search) });
+  },
+  component: UsersPage,
+});
+
+function UsersPage() {
+  const searchParams = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+
+  const { pageIndex, pageSize, sortBy, ...columnFilters } = searchParams;
+
+  // Map search params to table state
+  const pagination = useMemo(() => ({ pageIndex: pageIndex ?? 0, pageSize: pageSize ?? 10 }), [pageIndex, pageSize]);
+  const sorting = useMemo(() => sortByToState(sortBy), [sortBy]);
+
+  // Fetch data using React Query, passing search params
+  const { data, isFetching } = useQuery({
+    queryKey: ['users', searchParams],
+    queryFn: () => fetchUsers(searchParams),
+    placeholderData: keepPreviousData,
+  });
+
+  const table = useReactTable({
+     data?.result ?? [],
+    columns: USER_COLUMNS, // Your column definitions
+    pageCount: data?.pageCount ?? -1, // Or use rowCount
+    // rowCount: data?.rowCount,
+    state: {
+      pagination,
+      sorting,
+      // columnFilters can be derived directly from searchParams if needed for display
+    },
+    onPaginationChange: updater => {
+      const newState = typeof updater === 'function' ? updater(pagination) : updater;
+      navigate({ search: prev => cleanEmptyParams({ ...prev, ...newState }), replace: true });
+    },
+    onSortingChange: updater => {
+      const newState = typeof updater === 'function' ? updater(sorting) : updater;
+      navigate({ search: prev => cleanEmptyParams({ ...prev, sortBy: stateToSortBy(newState) }), replace: true });
+    },
+    // Server handles filtering, sorting, pagination
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true, // If using column filters via search params
+    getCoreRowModel: getCoreRowModel(),
+    // ... other options
+  });
+
+  // Handler for column filter changes
+  const handleFilterChange = (newFilters: Partial<UserSearchFilters>) => {
+     navigate({ search: prev => cleanEmptyParams({ ...prev, ...newFilters, pageIndex: 0 }), replace: true }); // Reset page index on filter change
+  };
+
+  return (
+    <div>
+      {/* Render filter inputs that call handleFilterChange */}
+      <Table
+        table={table}
+        // Pass necessary props to your Table component
+      />
+      {isFetching && <span>Loading...</span>}
+    </div>
+  );
+}
+```
+
+### Material UI Pagination Integration
+
+```jsx
+import TablePagination from '@mui/material/TablePagination';
+import TablePaginationActions from './actions'; // Custom actions component (see example)
+
+function MuiPaginatedTable({ data, columns }) {
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
+  const { pageSize, pageIndex } = table.getState().pagination;
+
+  return (
+    <>
+      {/* ... Table rendering ... */}
+      <TablePagination
+        rowsPerPageOptions={[5, 10, 25, { label: 'All', value: data.length }]}
+        component="div"
+        count={table.getFilteredRowModel().rows.length} // Or total row count if server-side
+        rowsPerPage={pageSize}
+        page={pageIndex}
+        onPageChange={(_, page) => table.setPageIndex(page)}
+        onRowsPerPageChange={e => table.setPageSize(Number(e.target.value))}
+        ActionsComponent={TablePaginationActions} // Use custom actions
+        // ... other MUI props
+      />
+    </>
+  );
+}
+```
+
+### Bootstrap Table Integration
+
+```jsx
+import { Table as BTable } from 'react-bootstrap';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
+function BootstrapTable({ data, columns }) {
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <BTable striped bordered hover responsive size="sm">
+      <thead>
+        {table.getHeaderGroups().map(headerGroup => (
+          <tr key={headerGroup.id}>
+            {headerGroup.headers.map(header => (
+              <th key={header.id} colSpan={header.colSpan}>
+                {/* ... render header ... */}
+              </th>
+            ))}
+          </tr>
+        ))}
+      </thead>
+      <tbody>
+        {table.getRowModel().rows.map(row => (
+          <tr key={row.id}>
+            {row.getVisibleCells().map(cell => (
+              <td key={cell.id}>
+                {/* ... render cell ... */}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+      {/* ... tfoot ... */}
+    </BTable>
+  );
+}
+```
+
+### Full Width Resizable Table
+
+```jsx
+// In useReactTable options:
+enableColumnResizing: true,
+columnResizeMode: 'onChange', // Or 'onEnd'
+
+// In header cell render:
+<th style={{ position: 'relative', width: header.getSize() }}>
+  {/* ... header content ... */}
+  {header.column.getCanResize() && (
+    <div
+      onMouseDown={header.getResizeHandler()}
+      onTouchStart={header.getResizeHandler()}
+      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+    />
+  )}
+</th>
+
+// In body cell render:
+<td style={{ width: cell.column.getSize() }}>
+  {/* ... cell content ... */}
+</td>
+
+// Ensure table has width: 100% or similar and container allows overflow
+// <div style={{ overflowX: 'auto' }}>
+//   <table style={{ width: '100%' }}>...</table>
+// </div>
+```
+
+### Kitchen Sink Example Notes
+
+- Combines many features: Sorting, Filtering (Column + Global Fuzzy), Pagination, Grouping, Row Selection, Column Ordering, Column Pinning, Column Resizing, Editable Cells.
+- Uses `@tanstack/match-sorter-utils` for fuzzy filtering/sorting.
+- Uses `@emotion/react` for styling (optional).
+- Demonstrates controlled state for most features.
+- Includes helper components like `IndeterminateCheckbox`, `DebouncedInput`, `Filter`.
+- Shows how to use `table.options.meta` to pass `updateData` function for editable cells.
+- Uses `useSkipper` hook to manage `autoResetPageIndex`.
+- Includes split view for pinned columns.
+```
